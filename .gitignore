@@ -1,0 +1,43 @@
+# Git ignore patterns for Azure infrastructure deployment
+
+# Deployment outputs
+deployment-output.json
+deployment-outputs.json
+
+# Azure CLI cache
+.azure/
+
+# Bicep build output
+*.bicep.json
+
+# Environment-specific parameter files (keep templates only)
+bicep/*.local.bicepparam
+bicep/*.private.bicepparam
+
+# Secrets and sensitive data
+*.key
+*.pem
+*.pfx
+secrets/
+.env
+.env.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Log files
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
