@@ -16,6 +16,7 @@ SUBSCRIPTION_ID="${AZURE_SUBSCRIPTION_ID:-6a6d110d-80ef-424a-b8bb-24439063ffb2}"
 CUSTOMER_NAME=""
 ENVIRONMENT=""
 GITHUB_REPO="KenichiYoshimura/mustrustDataPlatformProcessor"
+DEPLOY_ANALYZER=false
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -36,17 +37,22 @@ while [[ $# -gt 0 ]]; do
       SUBSCRIPTION_ID="$2"
       shift 2
       ;;
+    --with-analyzer)
+      DEPLOY_ANALYZER=true
+      shift
+      ;;
     --help)
-      echo "Usage: $0 --customer <name> --environment <env> --github-repo <owner/repo>"
+      echo "Usage: $0 --customer <name> --environment <env> [--with-analyzer] --github-repo <owner/repo>"
       echo ""
       echo "Options:"
       echo "  --customer        Customer name (e.g., yys, hcs)"
       echo "  --environment     Environment (dev, test, or prod)"
+      echo "  --with-analyzer   Deploy Cosmos DB + Analyzer Function App (Silver/Gold layers)"
       echo "  --github-repo     GitHub repository (e.g., your-org/function-app-repo)"
       echo "  --subscription    Azure subscription ID (optional)"
       echo ""
       echo "Example:"
-      echo "  $0 --customer yys --environment prod --github-repo myorg/mustrust-functions"
+      echo "  $0 --customer yys --environment dev --with-analyzer"
       exit 0
       ;;
     *)
@@ -84,6 +90,7 @@ echo ""
 # Compute resource names
 RESOURCE_GROUP="rg-mustrust-${CUSTOMER_NAME}-${ENVIRONMENT}"
 FUNCTION_APP="func-mustrust-preprocessor-${CUSTOMER_NAME}-${ENVIRONMENT}"
+ANALYZER_FUNCTION_APP="func-mustrust-analyzer-${CUSTOMER_NAME}-${ENVIRONMENT}"
 STORAGE_ACCOUNT="stmustrust${CUSTOMER_NAME}${ENVIRONMENT}"
 SP_NAME="github-mustrust-${CUSTOMER_NAME}-${ENVIRONMENT}"
 
@@ -91,6 +98,9 @@ echo -e "${YELLOW}📝 Resources to be created:${NC}"
 echo "  Resource Group:  $RESOURCE_GROUP"
 echo "  Storage Account: $STORAGE_ACCOUNT"
 echo "  Function App:    $FUNCTION_APP"
+if [[ "$DEPLOY_ANALYZER" == "true" ]]; then
+  echo "  Analyzer App:    $ANALYZER_FUNCTION_APP"
+fi
 echo "  Service Principal: $SP_NAME"
 echo ""
 
@@ -127,6 +137,10 @@ param location = 'japaneast'   // Azure region
 
 // Storage Account Settings
 param storageAccountSku = 'Standard_LRS' // Standard_LRS is cheapest
+
+// Silver & Gold Layer Deployment
+// Set to true to deploy Cosmos DB and Silver/Gold Function Apps
+param deploySilverGold = ${DEPLOY_ANALYZER}
 EOF
 echo -e "${GREEN}✅ Parameters updated${NC}"
 
@@ -183,37 +197,80 @@ echo "  • Resource Group: $RESOURCE_GROUP"
 echo "  • Storage Account: $STORAGE_ACCOUNT"
 echo "    - Containers: bronze-input-files, bronze-processed-files, bronze-invalid-files"
 echo "    - Queue: bronze-file-processing-queue"
-echo "  • Function App: $FUNCTION_APP"
+echo "  • Function App (Preprocessor): $FUNCTION_APP"
+if [[ "$DEPLOY_ANALYZER" == "true" ]]; then
+  echo "  • Function App (Analyzer): $ANALYZER_FUNCTION_APP"
+  echo "  • Cosmos DB: cosmos-mustrust-${CUSTOMER_NAME}-${ENVIRONMENT}"
+  echo "  • Language Service: lang-mustrust-${CUSTOMER_NAME}-${ENVIRONMENT}"
+fi
 echo ""
 echo -e "${GREEN}✅ GitHub Actions Credentials:${NC}"
-echo "  Saved to: $CREDS_FILE"
+echo "  Service Principal saved to: $CREDS_FILE"
 echo ""
 echo -e "${YELLOW}📋 Next Steps:${NC}"
 echo ""
-echo "1. Add GitHub Secret:"
-echo "   a. Go to: https://github.com/${GITHUB_REPO}/settings/secrets/actions"
-echo "   b. Click 'New repository secret'"
-echo "   c. Name: AZURE_CREDENTIALS"
-echo "   d. Value: Copy from file below"
+echo "══════════════════════════════════════════════════════"
+echo "1️⃣  Add GitHub Secret: AZURE_CREDENTIALS"
+echo "══════════════════════════════════════════════════════"
+echo "   This ONE secret works for BOTH Preprocessor and Analyzer apps!"
 echo ""
-echo -e "${BLUE}   Credentials file content:${NC}"
+echo "   Preprocessor Repository:"
+echo "   https://github.com/KenichiYoshimura/mustrustDataPlatformProcessor/settings/secrets/actions"
+echo ""
+if [[ "$DEPLOY_ANALYZER" == "true" ]]; then
+  echo "   Analyzer Repository:"
+  echo "   https://github.com/KenichiYoshimura/mustrustDataPlatformAnalyzer/settings/secrets/actions"
+  echo ""
+fi
+echo "   Secret Details:"
+echo "   - Name:  AZURE_CREDENTIALS"
+echo "   - Value: Copy from $CREDS_FILE (shown below)"
+echo ""
+echo -e "${BLUE}   Credentials content:${NC}"
 echo "   ----------------------------------------"
 cat "$CREDS_FILE"
 echo "   ----------------------------------------"
 echo ""
-echo "2. Copy workflow file to your Python app repo:"
-echo "   cp .github/workflows/deploy-function.yml <your-python-app-repo>/.github/workflows/"
-echo ""
-echo "3. Update workflow settings in deploy-function.yml:"
-echo "   - CUSTOMER_NAME: '${CUSTOMER_NAME}'"
-echo "   - AZURE_FUNCTIONAPP_PACKAGE_PATH: (adjust if needed)"
-echo ""
-echo "4. Push to GitHub:"
-echo "   - Push to 'main' branch → deploys to prod"
-echo "   - Push to 'develop' branch → deploys to dev"
+
+if [[ "$DEPLOY_ANALYZER" == "true" ]]; then
+  echo "══════════════════════════════════════════════════════"
+  echo "2️⃣  Configure Shared AI Credentials (MANUAL)"
+  echo "══════════════════════════════════════════════════════"
+  echo "   The Analyzer app needs shared AI service credentials:"
+  echo ""
+  echo "   Run this command:"
+  echo "   ./configure-analyzer-ai.sh --customer $CUSTOMER_NAME --environment $ENVIRONMENT"
+  echo ""
+  echo "   Or manually configure:"
+  echo "   az functionapp config appsettings set \\"
+  echo "     --name $ANALYZER_FUNCTION_APP \\"
+  echo "     --resource-group $RESOURCE_GROUP \\"
+  echo "     --settings \\"
+  echo "       \"DOCUMENT_INTELLIGENCE_ENDPOINT=<surveyformextractor2-endpoint>\" \\"
+  echo "       \"DOCUMENT_INTELLIGENCE_KEY=<surveyformextractor2-key>\" \\"
+  echo "       \"CUSTOM_VISION_PREDICTION_ENDPOINT=<circleMarkerRecognizer-endpoint>\" \\"
+  echo "       \"CUSTOM_VISION_PREDICTION_KEY=<circleMarkerRecognizer-key>\" \\"
+  echo "       \"CUSTOM_VISION_PROJECT_ID=<circleMarkerRecognizer-project-id>\" \\"
+  echo "       \"CUSTOM_VISION_ITERATION_NAME=Iteration6\""
+  echo ""
+  echo "   Get credentials from Azure Portal → hcsGroup resource group"
+  echo ""
+fi
+
+echo "══════════════════════════════════════════════════════"
+if [[ "$DEPLOY_ANALYZER" == "true" ]]; then
+  echo "3️⃣  Deploy Application Code"
+else
+  echo "2️⃣  Deploy Application Code"
+fi
+echo "══════════════════════════════════════════════════════"
+echo "   • Preprocessor: Push to main/develop or use GitHub Actions"
+if [[ "$DEPLOY_ANALYZER" == "true" ]]; then
+  echo "   • Analyzer: Push to main/develop or use GitHub Actions"
+fi
 echo ""
 echo -e "${YELLOW}⚠️  Security Note:${NC}"
-echo "  The credentials file ($CREDS_FILE) contains sensitive information."
+echo "  The credentials file contains sensitive information."
 echo "  After copying to GitHub Secrets, delete it:"
 echo "  rm $CREDS_FILE"
 echo ""

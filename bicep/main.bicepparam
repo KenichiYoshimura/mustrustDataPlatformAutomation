@@ -5,9 +5,13 @@ using './main.bicep'
 // Or use AZURE_SUBSCRIPTION_ID environment variable in deploy.sh
 
 // Basic Configuration
-param customerName = 'hcs'
-param environment = 'prod'
+param customerName = 'yys'
+param environment = 'dev'
 param location = 'japaneast'   // Azure region
 
 // Storage Account Settings
 param storageAccountSku = 'Standard_LRS' // Standard_LRS is cheapest
+
+// Silver & Gold Layer Deployment
+// Set to true to deploy Cosmos DB and Silver/Gold Function Apps
+param deploySilverGold = true

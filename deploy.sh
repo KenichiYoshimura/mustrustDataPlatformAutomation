@@ -51,15 +51,24 @@ echo ""
 
 # Deploy
 echo "📦 Deploying storage account..."
-az deployment sub create \
+DEPLOYMENT_OUTPUT=$(az deployment sub create \
     --name "mustrust-storage-$(date +%Y%m%d-%H%M%S)" \
     --location japaneast \
     --template-file bicep/main.bicep \
     --parameters bicep/main.bicepparam \
-    --output json > deployment-output.json
+    --output json 2>&1)
+
+DEPLOYMENT_EXIT_CODE=$?
+echo "$DEPLOYMENT_OUTPUT" > deployment-output.json
+
+if [ $DEPLOYMENT_EXIT_CODE -ne 0 ]; then
+    echo "❌ Deployment failed"
+    echo "$DEPLOYMENT_OUTPUT"
+    exit 1
+fi
 
 # Show results
 echo ""
 echo "✅ Deployment Complete!"
 echo "======================="
-cat deployment-output.json | jq -r '.properties.outputs | to_entries[] | "\(.key): \(.value.value)"'
+echo "$DEPLOYMENT_OUTPUT" | jq -r '.properties.outputs | to_entries[] | "\(.key): \(.value.value)"'

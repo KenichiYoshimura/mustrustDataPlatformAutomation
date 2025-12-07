@@ -3,6 +3,33 @@ param name string
 param location string
 param storageAccountName string
 
+// Application Insights parameters
+param appInsightsName string = '${name}-insights'
+
+// Log Analytics Workspace for Application Insights
+resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
+  name: '${name}-logs'
+  location: location
+  properties: {
+    sku: {
+      name: 'PerGB2018'
+    }
+    retentionInDays: 30
+  }
+}
+
+// Application Insights
+resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
+  name: appInsightsName
+  location: location
+  kind: 'web'
+  properties: {
+    Application_Type: 'web'
+    Request_Source: 'rest'
+    WorkspaceResourceId: logAnalyticsWorkspace.id
+  }
+}
+
 // Flex Consumption App Service Plan
 resource appServicePlan 'Microsoft.Web/serverfarms@2023-12-01' = {
   name: '${name}-plan'
@@ -63,6 +90,14 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
           name: 'FUNCTIONS_EXTENSION_VERSION'
           value: '~4'
         }
+        {
+          name: 'APPINSIGHTS_INSTRUMENTATIONKEY'
+          value: appInsights.properties.InstrumentationKey
+        }
+        {
+          name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+          value: appInsights.properties.ConnectionString
+        }
       ]
     }
   }
@@ -72,3 +107,6 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
 output id string = functionApp.id
 output name string = functionApp.name
 output url string = 'https://${functionApp.properties.defaultHostName}'
+output appInsightsId string = appInsights.id
+output appInsightsName string = appInsights.name
+output appInsightsInstrumentationKey string = appInsights.properties.InstrumentationKey
