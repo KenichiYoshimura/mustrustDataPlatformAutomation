@@ -21,6 +21,7 @@ bicep/*.private.bicepparam
 secrets/
 .env
 .env.local
+.azure-credentials-*.json
 
 # OS files
 .DS_Store
