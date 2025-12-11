@@ -4,6 +4,10 @@ param location string
 param storageAccountName string
 param analyzerStorageAccountName string = '' // Optional: for writing to analyzer storage
 
+// Analyzer backend connection (for preprocessor to call analyzer)
+param analyzerFunctionAppName string = '' // Optional: analyzer backend URL
+param analyzerFunctionKey string = '' // Optional: analyzer function key
+
 // Application Insights parameters
 param appInsightsName string = '${name}-insights'
 
@@ -79,6 +83,18 @@ var baseAppSettings = [
   }
 ]
 
+// Analyzer backend settings (for preprocessor to securely call analyzer)
+var analyzerBackendSettings = analyzerFunctionAppName != '' ? [
+  {
+    name: 'ANALYZER_FUNCTION_URL'
+    value: 'https://${analyzerFunctionAppName}.azurewebsites.net'
+  }
+  {
+    name: 'ANALYZER_FUNCTION_KEY'
+    value: analyzerFunctionKey
+  }
+] : []
+
 var analyzerStorageSettings = analyzerStorageAccountName != '' ? [
   {
     name: 'ANALYZER_STORAGE_CONNECTION_STRING'
@@ -114,7 +130,7 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
       }
     }
     siteConfig: {
-      appSettings: concat(baseAppSettings, analyzerStorageSettings)
+      appSettings: concat(baseAppSettings, analyzerBackendSettings, analyzerStorageSettings)
     }
   }
 }

@@ -304,6 +304,8 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
 output functionAppId string = functionApp.id
 output functionAppName string = functionApp.name
 output functionAppUrl string = 'https://${functionApp.properties.defaultHostName}'
+@secure()
+output functionAppDefaultKey string = listKeys('${functionApp.id}/host/default', '2023-12-01').functionKeys.default
 output appServicePlanId string = appServicePlan.id
 output appInsightsId string = appInsights.id
 output appInsightsName string = appInsights.name
