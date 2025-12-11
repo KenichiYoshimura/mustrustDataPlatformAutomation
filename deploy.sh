@@ -51,19 +51,24 @@ echo ""
 
 # Deploy
 echo "📦 Deploying storage account..."
-DEPLOYMENT_OUTPUT=$(az deployment sub create \
+az deployment sub create \
     --name "mustrust-storage-$(date +%Y%m%d-%H%M%S)" \
     --location japaneast \
     --template-file bicep/main.bicep \
-    --parameters bicep/main.bicepparam \
-    --output json 2>&1)
+    --parameters bicep/main.bicepparam
 
 DEPLOYMENT_EXIT_CODE=$?
-echo "$DEPLOYMENT_OUTPUT" > deployment-output.json
 
 if [ $DEPLOYMENT_EXIT_CODE -ne 0 ]; then
     echo "❌ Deployment failed"
-    echo "$DEPLOYMENT_OUTPUT"
+    echo ""
+    echo "Common issues:"
+    echo "  • Soft-deleted resources: Check for soft-deleted Cognitive Services resources"
+    echo "    - Run: az cognitiveservices account list-deleted"
+    echo "    - Purge: az cognitiveservices account purge --name <name> --resource-group <rg> --location <location>"
+    echo "  • Resource conflicts: A resource with the same name may already exist"
+    echo "  • Permission issues: Ensure you have Contributor access to the subscription"
+    echo ""
     exit 1
 fi
 
@@ -71,4 +76,4 @@ fi
 echo ""
 echo "✅ Deployment Complete!"
 echo "======================="
-echo "$DEPLOYMENT_OUTPUT" | jq -r '.properties.outputs | to_entries[] | "\(.key): \(.value.value)"'
+echo ""

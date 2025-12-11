@@ -110,8 +110,25 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
           value: 'node'
         }
         {
+          name: 'FUNCTIONS_WORKER_RUNTIME_VERSION'
+          value: '~20'
+        }
+        {
           name: 'WEBSITE_NODE_DEFAULT_VERSION'
           value: '~18'
+        }
+        // Build and deployment settings
+        {
+          name: 'ENABLE_ORYX_BUILD'
+          value: 'true'
+        }
+        {
+          name: 'SCM_DO_BUILD_DURING_DEPLOYMENT'
+          value: 'true'
+        }
+        {
+          name: 'WEBSITE_ENABLE_SYNC_UPDATE_SITE'
+          value: 'true'
         }
         // Application Insights
         {
@@ -156,37 +173,84 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
         // Set these manually to point to shared HCS Document Intelligence resource
         {
           name: 'DOCUMENT_INTELLIGENCE_ENDPOINT'
-          value: '' // To be set manually to shared resource endpoint
+          value: '' // To be set by configure-analyzer-ai.sh
         }
         {
           name: 'DOCUMENT_INTELLIGENCE_KEY'
-          value: '' // To be set manually to shared resource key
+          value: '' // To be set by configure-analyzer-ai.sh
+        }
+        // Classifier (Silver Layer) - Using shared resources
+        {
+          name: 'CLASSIFIER_ENDPOINT'
+          value: '' // To be set by configure-analyzer-ai.sh
         }
         {
-          name: 'BANK_SURVEY_MODEL_ID'
-          value: '' // To be set manually after model training
+          name: 'CLASSIFIER_ENDPOINT_AZURE_API_KEY'
+          value: '' // To be set by configure-analyzer-ai.sh
+        }
+        {
+          name: 'CLASSIFIER_ID'
+          value: '' // To be set by configure-analyzer-ai.sh
+        }
+        // Bank Document Intelligence - Using shared resources
+        {
+          name: 'BANK_DOCUMENT_INTELLIGENCE_ENDPOINT'
+          value: '' // To be set by configure-analyzer-ai.sh
+        }
+        {
+          name: 'BANK_DOCUMENT_INTELLIGENCE_KEY'
+          value: '' // To be set by configure-analyzer-ai.sh
+        }
+        {
+          name: 'BANK_CUSTOM_MODEL_ID'
+          value: '' // To be set by configure-analyzer-ai.sh
+        }
+        // Bank Custom Vision - Using shared resources
+        {
+          name: 'BANK_CUSTOM_VISION_ENDPOINT'
+          value: '' // To be set by configure-analyzer-ai.sh
+        }
+        {
+          name: 'BANK_CUSTOM_VISION_PREDICTION_KEY'
+          value: '' // To be set by configure-analyzer-ai.sh
+        }
+        {
+          name: 'BANK_CUSTOM_VISION_PROJECT_ID'
+          value: '' // To be set by configure-analyzer-ai.sh
+        }
+        {
+          name: 'BANK_CUSTOM_VISION_ITERATION_NAME'
+          value: '' // To be set by configure-analyzer-ai.sh
         }
         {
           name: 'WORKSHOP_SURVEY_MODEL_ID'
           value: '' // To be set manually after model training
         }
-        // Custom Vision (Silver Layer) - Using shared resources
-        // Set these manually to point to shared HCS Custom Vision project
+        // Custom Vision Prediction (Silver Layer) - Using shared resources
         {
           name: 'CUSTOM_VISION_PREDICTION_ENDPOINT'
-          value: '' // To be set manually to shared resource endpoint
+          value: '' // To be set by configure-analyzer-ai.sh
         }
         {
           name: 'CUSTOM_VISION_PREDICTION_KEY'
-          value: '' // To be set manually to shared resource key
+          value: '' // To be set by configure-analyzer-ai.sh
+        }
+        // Custom Vision Training (Silver Layer) - Using shared resources
+        {
+          name: 'CUSTOM_VISION_ENDPOINT'
+          value: '' // To be set by configure-analyzer-ai.sh
+        }
+        {
+          name: 'CUSTOM_VISION_KEY'
+          value: '' // To be set by configure-analyzer-ai.sh
         }
         {
           name: 'CUSTOM_VISION_PROJECT_ID'
-          value: '' // To be set manually to shared project ID
+          value: '' // To be set by configure-analyzer-ai.sh
         }
         {
           name: 'CUSTOM_VISION_ITERATION_NAME'
-          value: 'Iteration6' // Update based on actual iteration name
+          value: '' // To be set by configure-analyzer-ai.sh
         }
         // Language Services (Gold Layer)
         {
@@ -198,8 +262,29 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
           value: languageService.listKeys().key1
         }
         {
+          name: 'AZURE_LANGUAGE_ENDPOINT'
+          value: languageService.properties.endpoint
+        }
+        {
+          name: 'AZURE_LANGUAGE_KEY'
+          value: languageService.listKeys().key1
+        }
+        {
           name: 'TRANSLATION_TARGET_LANGUAGE'
           value: 'en'
+        }
+        // Azure Translator (Shared across all environments)
+        {
+          name: 'AZURE_TRANSLATOR_ENDPOINT'
+          value: '' // To be set by configure-analyzer-ai.sh
+        }
+        {
+          name: 'AZURE_TRANSLATOR_KEY'
+          value: '' // To be set by configure-analyzer-ai.sh
+        }
+        {
+          name: 'AZURE_TRANSLATOR_REGION'
+          value: '' // To be set by configure-analyzer-ai.sh
         }
       ]
       cors: {

@@ -10,6 +10,7 @@ param deploySilverGold bool = false // Flag to deploy Silver/Gold layers
 // Variables
 var resourceGroupName = 'rg-mustrust-${customerName}-${environment}'
 var storageAccountName = 'stmustrust${customerName}${environment}'
+var webStorageAccountName = 'stmustrustweb${customerName}${environment}'
 var functionAppName = 'func-mustrust-preprocessor-${customerName}-${environment}'
 var cosmosAccountName = 'cosmos-mustrust-${customerName}-${environment}'
 var analyzerFunctionAppName = 'func-mustrust-analyzer-${customerName}-${environment}'
@@ -26,7 +27,7 @@ resource rg 'Microsoft.Resources/resourceGroups@2023-07-01' = {
   }
 }
 
-// Storage Account
+// Storage Account (for Analyzer)
 module storage 'modules/storage.bicep' = {
   name: 'storageDeploy'
   scope: rg
@@ -34,18 +35,32 @@ module storage 'modules/storage.bicep' = {
     name: storageAccountName
     location: location
     sku: storageAccountSku
-    functionAppName: functionAppName
+    functionAppName: ''
   }
 }
 
-// Function App
+// Web Storage Account (for Frontend & Preprocessor)
+module webStorage 'modules/storage-web.bicep' = {
+  name: 'webStorageDeploy'
+  scope: rg
+  params: {
+    name: webStorageAccountName
+    location: location
+    sku: storageAccountSku
+    functionAppName: functionAppName
+    enableStaticWebsite: true
+  }
+}
+
+// Function App (Preprocessor)
 module functionApp 'modules/function.bicep' = {
   name: 'functionAppDeploy'
   scope: rg
   params: {
     name: functionAppName
     location: location
-    storageAccountName: storage.outputs.name
+    storageAccountName: webStorage.outputs.name
+    analyzerStorageAccountName: storage.outputs.name
   }
 }
 
@@ -54,9 +69,9 @@ module functionApp 'modules/function.bicep' = {
 //   name: 'eventGridDeploy'
 //   scope: rg
 //   params: {
-//     storageAccountName: storage.outputs.name
+//     storageAccountName: webStorage.outputs.name
 //     functionAppName: functionApp.outputs.name
-//     containerName: 'bronze-input-files'
+//     containerName: 'web-input-files'
 //   }
 // }
 
@@ -127,6 +142,9 @@ module analyzerFunctionApp 'modules/function-analyzer.bicep' = if (deploySilverG
 output resourceGroupName string = rg.name
 output storageAccountName string = storage.outputs.name
 output storageAccountId string = storage.outputs.id
+output webStorageAccountName string = webStorage.outputs.name
+output webStorageAccountId string = webStorage.outputs.id
+output webStorageWebEndpoint string = webStorage.outputs.webEndpoint
 output functionAppName string = functionApp.outputs.name
 output functionAppUrl string = functionApp.outputs.url
 

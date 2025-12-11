@@ -1,9 +1,9 @@
-// Simple Storage Account Module
+// Web Storage Account Module for Frontend & Preprocessor
 param name string
 param location string
 param sku string
 param functionAppName string = ''
-param enableStaticWebsite bool = false
+param enableStaticWebsite bool = true
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
   name: name
@@ -16,7 +16,7 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
     accessTier: 'Hot'
     minimumTlsVersion: 'TLS1_2'
     supportsHttpsTrafficOnly: true
-    allowBlobPublicAccess: enableStaticWebsite // Enable public access if static website is enabled
+    allowBlobPublicAccess: enableStaticWebsite // Enable public access for static website
   }
 }
 
@@ -36,6 +36,8 @@ resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-01-01'
             'GET'
             'HEAD'
             'OPTIONS'
+            'POST'
+            'PUT'
           ]
           allowedHeaders: [
             '*'
@@ -50,38 +52,16 @@ resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-01-01'
   } : {}
 }
 
-// Create 3 containers
-resource bronzeInputFilesContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-01-01' = {
+// Web Input Files Container - where frontend uploads files
+resource webInputFilesContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-01-01' = {
   parent: blobService
-  name: 'bronze-input-files'
-}
-
-resource bronzeProcessedFilesContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-01-01' = {
-  parent: blobService
-  name: 'bronze-processed-files'
-}
-
-resource bronzeInvalidFilesContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-01-01' = {
-  parent: blobService
-  name: 'bronze-invalid-files'
+  name: 'web-input-files'
 }
 
 // Deployment container for Flex Consumption Function App
 resource deploymentContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-01-01' = if (functionAppName != '') {
   parent: blobService
   name: functionAppName
-}
-
-// Queue Service
-resource queueService 'Microsoft.Storage/storageAccounts/queueServices@2023-01-01' = {
-  parent: storageAccount
-  name: 'default'
-}
-
-// Create queue for file processing
-resource bronzeFileProcessingQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-01-01' = {
-  parent: queueService
-  name: 'bronze-file-processing-queue'
 }
 
 // Outputs

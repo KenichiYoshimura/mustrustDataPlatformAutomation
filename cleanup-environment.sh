@@ -13,6 +13,7 @@ NC='\033[0m'
 CUSTOMER_NAME=""
 ENVIRONMENT=""
 SUBSCRIPTION_ID="${AZURE_SUBSCRIPTION_ID:-6a6d110d-80ef-424a-b8bb-24439063ffb2}"
+LOCATION="japaneast"
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -28,6 +29,10 @@ while [[ $# -gt 0 ]]; do
       SUBSCRIPTION_ID="$2"
       shift 2
       ;;
+    --location)
+      LOCATION="$2"
+      shift 2
+      ;;
     --help)
       echo "Usage: $0 --customer <name> --environment <env>"
       echo ""
@@ -35,6 +40,7 @@ while [[ $# -gt 0 ]]; do
       echo "  --customer        Customer name"
       echo "  --environment     Environment (dev, test, or prod)"
       echo "  --subscription    Azure subscription ID (optional)"
+      echo "  --location        Azure location (default: japaneast)"
       exit 0
       ;;
     *)
@@ -70,9 +76,17 @@ echo -e "${BLUE}🗑️  Deleting resources...${NC}"
 # Set subscription
 az account set --subscription "$SUBSCRIPTION_ID"
 
-# Delete resource group
-echo "Deleting resource group: $RESOURCE_GROUP"
-az group delete --name "$RESOURCE_GROUP" --yes --no-wait
+# Delete resource group (wait for completion to ensure resources are soft-deleted)
+echo "Deleting resource group: $RESOURCE_GROUP (this may take a few minutes)..."
+az group delete --name "$RESOURCE_GROUP" --yes
+
+# Purge soft-deleted Cognitive Services to allow immediate recreation
+LANG_SERVICE_NAME="lang-mustrust-${CUSTOMER_NAME}-${ENVIRONMENT}"
+echo "Purging soft-deleted Cognitive Services: $LANG_SERVICE_NAME"
+az cognitiveservices account purge \
+  --name "$LANG_SERVICE_NAME" \
+  --resource-group "$RESOURCE_GROUP" \
+  --location "$LOCATION" 2>/dev/null || echo "  (No soft-deleted Cognitive Services found or already purged)"
 
 # Delete service principal
 SP_ID=$(az ad sp list --display-name "$SP_NAME" --query "[0].id" -o tsv 2>/dev/null)
@@ -84,6 +98,6 @@ else
 fi
 
 echo ""
-echo -e "${GREEN}✅ Cleanup initiated${NC}"
-echo "Resource group deletion is running in the background."
-echo "It may take a few minutes to complete."
+echo -e "${GREEN}✅ Cleanup complete${NC}"
+echo "Resource group has been deleted and Cognitive Services have been purged."
+echo "You can now run setup-environment.sh to create a fresh environment."

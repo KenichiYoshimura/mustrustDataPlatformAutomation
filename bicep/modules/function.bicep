@@ -2,6 +2,7 @@
 param name string
 param location string
 param storageAccountName string
+param analyzerStorageAccountName string = '' // Optional: for writing to analyzer storage
 
 // Application Insights parameters
 param appInsightsName string = '${name}-insights'
@@ -49,6 +50,42 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' existing 
   name: storageAccountName
 }
 
+// Get analyzer storage account reference (optional - only referenced when analyzerStorageAccountName is provided)
+resource analyzerStorageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' existing = {
+  name: analyzerStorageAccountName != '' ? analyzerStorageAccountName : storageAccountName
+}
+
+// Build app settings array
+var baseAppSettings = [
+  {
+    name: 'AzureWebJobsStorage'
+    value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccountName};EndpointSuffix=${environment().suffixes.storage};AccountKey=${storageAccount.listKeys().keys[0].value}'
+  }
+  {
+    name: 'DEPLOYMENT_STORAGE_CONNECTION_STRING'
+    value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccountName};EndpointSuffix=${environment().suffixes.storage};AccountKey=${storageAccount.listKeys().keys[0].value}'
+  }
+  {
+    name: 'FUNCTIONS_EXTENSION_VERSION'
+    value: '~4'
+  }
+  {
+    name: 'APPINSIGHTS_INSTRUMENTATIONKEY'
+    value: appInsights.properties.InstrumentationKey
+  }
+  {
+    name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+    value: appInsights.properties.ConnectionString
+  }
+]
+
+var analyzerStorageSettings = analyzerStorageAccountName != '' ? [
+  {
+    name: 'ANALYZER_STORAGE_CONNECTION_STRING'
+    value: 'DefaultEndpointsProtocol=https;AccountName=${analyzerStorageAccountName};EndpointSuffix=${environment().suffixes.storage};AccountKey=${analyzerStorageAccount.listKeys().keys[0].value}'
+  }
+] : []
+
 // Function App - Flex Consumption
 resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
   name: name
@@ -77,28 +114,7 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
       }
     }
     siteConfig: {
-      appSettings: [
-        {
-          name: 'AzureWebJobsStorage'
-          value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccountName};EndpointSuffix=${environment().suffixes.storage};AccountKey=${storageAccount.listKeys().keys[0].value}'
-        }
-        {
-          name: 'DEPLOYMENT_STORAGE_CONNECTION_STRING'
-          value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccountName};EndpointSuffix=${environment().suffixes.storage};AccountKey=${storageAccount.listKeys().keys[0].value}'
-        }
-        {
-          name: 'FUNCTIONS_EXTENSION_VERSION'
-          value: '~4'
-        }
-        {
-          name: 'APPINSIGHTS_INSTRUMENTATIONKEY'
-          value: appInsights.properties.InstrumentationKey
-        }
-        {
-          name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
-          value: appInsights.properties.ConnectionString
-        }
-      ]
+      appSettings: concat(baseAppSettings, analyzerStorageSettings)
     }
   }
 }

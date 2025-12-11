@@ -31,14 +31,17 @@ if [ -z "$CUSTOMER" ] || [ -z "$ENVIRONMENT" ]; then
 fi
 
 RESOURCE_GROUP="rg-mustrust-${CUSTOMER}-${ENVIRONMENT}"
-STORAGE_ACCOUNT="stmustrust${CUSTOMER}${ENVIRONMENT}"
+WEB_STORAGE_ACCOUNT="stmustrustweb${CUSTOMER}${ENVIRONMENT}"
 FUNCTION_APP="func-mustrust-preprocessor-${CUSTOMER}-${ENVIRONMENT}"
+ANALYZER_FUNCTION_APP="func-mustrust-analyzer-${CUSTOMER}-${ENVIRONMENT}"
 
 echo -e "Configuration:"
-echo -e "  Customer:       ${GREEN}${CUSTOMER}${NC}"
-echo -e "  Environment:    ${GREEN}${ENVIRONMENT}${NC}"
-echo -e "  Resource Group: ${GREEN}${RESOURCE_GROUP}${NC}"
-echo -e "  Function App:   ${GREEN}${FUNCTION_APP}${NC}"
+echo -e "  Customer:           ${GREEN}${CUSTOMER}${NC}"
+echo -e "  Environment:        ${GREEN}${ENVIRONMENT}${NC}"
+echo -e "  Resource Group:     ${GREEN}${RESOURCE_GROUP}${NC}"
+echo -e "  Web Storage:        ${GREEN}${WEB_STORAGE_ACCOUNT}${NC}"
+echo -e "  Preprocessor App:   ${GREEN}${FUNCTION_APP}${NC}"
+echo -e "  Analyzer App:       ${GREEN}${ANALYZER_FUNCTION_APP}${NC}"
 echo ""
 
 # Check Azure login
@@ -77,6 +80,43 @@ else
   echo -e "${GREEN}✅ EventGridTrigger function found${NC}"
 fi
 
+# Configure CORS for frontend
+echo ""
+echo -e "${BLUE}🌐 Configuring CORS for frontend...${NC}"
+FRONTEND_URL="https://${WEB_STORAGE_ACCOUNT}.z11.web.core.windows.net"
+
+# Configure CORS for preprocessor
+echo -e "Configuring CORS for preprocessor..."
+CURRENT_CORS=$(az functionapp cors show --name "$FUNCTION_APP" --resource-group "$RESOURCE_GROUP" --query "allowedOrigins" -o tsv 2>/dev/null || echo "")
+
+if [[ "$CURRENT_CORS" =~ "$FRONTEND_URL" ]]; then
+  echo -e "${GREEN}✅ Preprocessor CORS already configured${NC}"
+else
+  echo -e "Adding CORS origin: ${FRONTEND_URL}"
+  az functionapp cors add \
+    --name "$FUNCTION_APP" \
+    --resource-group "$RESOURCE_GROUP" \
+    --allowed-origins "$FRONTEND_URL" \
+    --output none
+  echo -e "${GREEN}✅ Preprocessor CORS configured${NC}"
+fi
+
+# Configure CORS for analyzer
+echo -e "Configuring CORS for analyzer..."
+ANALYZER_CORS=$(az functionapp cors show --name "$ANALYZER_FUNCTION_APP" --resource-group "$RESOURCE_GROUP" --query "allowedOrigins" -o tsv 2>/dev/null || echo "")
+
+if [[ "$ANALYZER_CORS" =~ "$FRONTEND_URL" ]]; then
+  echo -e "${GREEN}✅ Analyzer CORS already configured${NC}"
+else
+  echo -e "Adding CORS origin: ${FRONTEND_URL}"
+  az functionapp cors add \
+    --name "$ANALYZER_FUNCTION_APP" \
+    --resource-group "$RESOURCE_GROUP" \
+    --allowed-origins "$FRONTEND_URL" \
+    --output none
+  echo -e "${GREEN}✅ Analyzer CORS configured${NC}"
+fi
+
 # Deploy Event Grid subscription
 echo ""
 echo -e "${BLUE}📦 Deploying Event Grid subscription...${NC}"
@@ -85,9 +125,9 @@ az deployment group create \
   --resource-group "$RESOURCE_GROUP" \
   --template-file bicep/modules/eventgrid.bicep \
   --parameters \
-    storageAccountName="$STORAGE_ACCOUNT" \
+    storageAccountName="$WEB_STORAGE_ACCOUNT" \
     functionAppName="$FUNCTION_APP" \
-    containerName="bronze-input-files" \
+    containerName="web-input-files" \
   --output table
 
 if [ $? -eq 0 ]; then
@@ -99,10 +139,12 @@ if [ $? -eq 0 ]; then
   echo ""
   echo -e "${BLUE}To test:${NC}"
   echo "  az storage blob upload \\"
-  echo "    --account-name $STORAGE_ACCOUNT \\"
-  echo "    --container-name bronze-input-files \\"
-  echo "    --name test-image.jpg \\"
-  echo "    --file /path/to/your/test-image.jpg"
+  echo "    --account-name $WEB_STORAGE_ACCOUNT \\"
+  echo "    --container-name web-input-files \\"
+  echo "    --name test.pdf \\"
+  echo "    --file /path/to/your/test.pdf"
+  echo ""
+  echo "Or use the frontend: https://${WEB_STORAGE_ACCOUNT}.z11.web.core.windows.net/"
 else
   echo -e "${RED}❌ Event Grid deployment failed${NC}"
   exit 1
