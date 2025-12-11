@@ -80,17 +80,20 @@ else
   echo -e "${GREEN}✅ EventGridTrigger function found${NC}"
 fi
 
-# Configure CORS for frontend
+# Configure CORS for new secure architecture
+# Architecture: Browser → Preprocessor → Analyzer
+# - Preprocessor: Allows frontend origin (browser calls it)
+# - Analyzer: Only Azure Portal (backend-to-backend communication only)
 echo ""
-echo -e "${BLUE}🌐 Configuring CORS for frontend...${NC}"
+echo -e "${BLUE}🌐 Configuring CORS for secure architecture...${NC}"
 FRONTEND_URL="https://${WEB_STORAGE_ACCOUNT}.z11.web.core.windows.net"
 
-# Configure CORS for preprocessor
-echo -e "Configuring CORS for preprocessor..."
+# Configure CORS for preprocessor (allow frontend)
+echo -e "Configuring CORS for preprocessor (allows frontend)..."
 CURRENT_CORS=$(az functionapp cors show --name "$FUNCTION_APP" --resource-group "$RESOURCE_GROUP" --query "allowedOrigins" -o tsv 2>/dev/null || echo "")
 
 if [[ "$CURRENT_CORS" =~ "$FRONTEND_URL" ]]; then
-  echo -e "${GREEN}✅ Preprocessor CORS already configured${NC}"
+  echo -e "${GREEN}✅ Preprocessor CORS already configured for frontend${NC}"
 else
   echo -e "Adding CORS origin: ${FRONTEND_URL}"
   az functionapp cors add \
@@ -101,21 +104,40 @@ else
   echo -e "${GREEN}✅ Preprocessor CORS configured${NC}"
 fi
 
-# Configure CORS for analyzer
-echo -e "Configuring CORS for analyzer..."
-ANALYZER_CORS=$(az functionapp cors show --name "$ANALYZER_FUNCTION_APP" --resource-group "$RESOURCE_GROUP" --query "allowedOrigins" -o tsv 2>/dev/null || echo "")
+# Configure CORS for analyzer (remove frontend, keep only Azure Portal)
+echo -e "Configuring CORS for analyzer (backend-only)..."
+echo -e "${YELLOW}🔒 Removing frontend origin from analyzer (security hardening)${NC}"
 
-if [[ "$ANALYZER_CORS" =~ "$FRONTEND_URL" ]]; then
-  echo -e "${GREEN}✅ Analyzer CORS already configured${NC}"
-else
-  echo -e "Adding CORS origin: ${FRONTEND_URL}"
-  az functionapp cors add \
+# Get current CORS settings
+ANALYZER_CORS_LIST=$(az functionapp cors show --name "$ANALYZER_FUNCTION_APP" --resource-group "$RESOURCE_GROUP" --query "allowedOrigins[]" -o tsv 2>/dev/null || echo "")
+
+# Remove frontend origin if it exists
+if [[ "$ANALYZER_CORS_LIST" =~ "$FRONTEND_URL" ]]; then
+  echo -e "Removing frontend origin from analyzer..."
+  az functionapp cors remove \
     --name "$ANALYZER_FUNCTION_APP" \
     --resource-group "$RESOURCE_GROUP" \
     --allowed-origins "$FRONTEND_URL" \
     --output none
-  echo -e "${GREEN}✅ Analyzer CORS configured${NC}"
+  echo -e "${GREEN}✅ Frontend origin removed from analyzer${NC}"
+else
+  echo -e "${GREEN}✅ Analyzer CORS already secure (no frontend origin)${NC}"
 fi
+
+# Ensure Azure Portal is allowed for management
+if [[ ! "$ANALYZER_CORS_LIST" =~ "https://portal.azure.com" ]]; then
+  echo -e "Adding Azure Portal origin for management..."
+  az functionapp cors add \
+    --name "$ANALYZER_FUNCTION_APP" \
+    --resource-group "$RESOURCE_GROUP" \
+    --allowed-origins "https://portal.azure.com" \
+    --output none
+  echo -e "${GREEN}✅ Azure Portal origin added${NC}"
+fi
+
+echo -e "${GREEN}✅ CORS configuration complete${NC}"
+echo -e "   - Preprocessor: Frontend can access (${FRONTEND_URL})"
+echo -e "   - Analyzer: Backend-only (Azure Portal for management)"
 
 # Deploy Event Grid subscription
 echo ""
