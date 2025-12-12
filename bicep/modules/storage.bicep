@@ -78,10 +78,16 @@ resource queueService 'Microsoft.Storage/storageAccounts/queueServices@2023-01-0
   name: 'default'
 }
 
-// Create queue for file processing
+// Create queue for file processing (Bronze -> Silver)
 resource bronzeFileProcessingQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-01-01' = {
   parent: queueService
   name: 'bronze-file-processing-queue'
+}
+
+// Create queue for Silver -> Gold enrichment (serial processing)
+resource silverGoldProcessingQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-01-01' = {
+  parent: queueService
+  name: 'silver-gold-processing-queue'
 }
 
 // Outputs
