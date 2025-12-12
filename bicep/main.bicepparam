@@ -6,7 +6,7 @@ using './main.bicep'
 
 // Basic Configuration
 param customerName = 'yys'
-param environment = 'prod'
+param environment = 'dev'
 param location = 'japaneast'   // Azure region
 
 // Storage Account Settings
