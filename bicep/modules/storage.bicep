@@ -50,12 +50,7 @@ resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-01-01'
   } : {}
 }
 
-// Create 3 containers
-resource bronzeInputFilesContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-01-01' = {
-  parent: blobService
-  name: 'bronze-input-files'
-}
-
+// Create 2 containers (bronze-input-files removed - legacy)
 resource bronzeProcessedFilesContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-01-01' = {
   parent: blobService
   name: 'bronze-processed-files'
