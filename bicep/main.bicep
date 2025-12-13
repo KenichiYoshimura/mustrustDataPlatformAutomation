@@ -60,7 +60,6 @@ module functionApp 'modules/function.bicep' = {
     name: functionAppName
     location: location
     storageAccountName: webStorage.outputs.name
-    analyzerStorageAccountName: storage.outputs.name
     analyzerFunctionAppName: deploySilverGold ? analyzerFunctionApp.outputs.functionAppName : ''
     analyzerFunctionKey: deploySilverGold ? analyzerFunctionApp.outputs.functionAppDefaultKey : ''
   }

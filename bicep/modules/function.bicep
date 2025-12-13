@@ -2,7 +2,6 @@
 param name string
 param location string
 param storageAccountName string
-param analyzerStorageAccountName string = '' // Optional: for writing to analyzer storage
 
 // Analyzer backend connection (for preprocessor to call analyzer)
 param analyzerFunctionAppName string = '' // Optional: analyzer backend URL
@@ -54,11 +53,6 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' existing 
   name: storageAccountName
 }
 
-// Get analyzer storage account reference (optional - only referenced when analyzerStorageAccountName is provided)
-resource analyzerStorageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' existing = {
-  name: analyzerStorageAccountName != '' ? analyzerStorageAccountName : storageAccountName
-}
-
 // Build app settings array
 var baseAppSettings = [
   {
@@ -95,13 +89,6 @@ var analyzerBackendSettings = analyzerFunctionAppName != '' ? [
   }
 ] : []
 
-var analyzerStorageSettings = analyzerStorageAccountName != '' ? [
-  {
-    name: 'ANALYZER_STORAGE_CONNECTION_STRING'
-    value: 'DefaultEndpointsProtocol=https;AccountName=${analyzerStorageAccountName};EndpointSuffix=${environment().suffixes.storage};AccountKey=${analyzerStorageAccount.listKeys().keys[0].value}'
-  }
-] : []
-
 // Function App - Flex Consumption
 resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
   name: name
@@ -130,7 +117,7 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
       }
     }
     siteConfig: {
-      appSettings: concat(baseAppSettings, analyzerBackendSettings, analyzerStorageSettings)
+      appSettings: concat(baseAppSettings, analyzerBackendSettings)
     }
   }
 }
