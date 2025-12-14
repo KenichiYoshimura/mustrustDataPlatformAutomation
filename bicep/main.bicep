@@ -65,7 +65,12 @@ module functionApp 'modules/function.bicep' = if (!deploySilverGold) {
   }
 }
 
-// Function App (Preprocessor with Analyzer)
+// Function App (Preprocessor with Analyzer) - deployed after analyzer is ready
+resource analyzerFunctionAppResource 'Microsoft.Web/sites@2023-12-01' existing = if (deploySilverGold) {
+  scope: rg
+  name: analyzerFunctionAppName
+}
+
 module functionAppWithAnalyzer 'modules/function.bicep' = if (deploySilverGold) {
   name: 'functionAppWithAnalyzerDeploy'
   scope: rg
@@ -73,8 +78,8 @@ module functionAppWithAnalyzer 'modules/function.bicep' = if (deploySilverGold) 
     name: functionAppName
     location: location
     storageAccountName: webStorage.outputs.name
-    analyzerFunctionAppName: analyzerFunctionApp!.outputs.functionAppName
-    analyzerFunctionKey: analyzerFunctionApp!.outputs.functionAppDefaultKey
+    analyzerFunctionAppName: analyzerFunctionAppName
+    analyzerFunctionKey: deploySilverGold ? listKeys('${analyzerFunctionAppResource.id}/host/default', '2023-12-01').functionKeys.default : ''
   }
   dependsOn: [analyzerFunctionApp]
 }
