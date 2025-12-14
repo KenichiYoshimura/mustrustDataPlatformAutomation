@@ -66,11 +66,6 @@ module functionApp 'modules/function.bicep' = if (!deploySilverGold) {
 }
 
 // Function App (Preprocessor with Analyzer) - deployed after analyzer is ready
-resource analyzerFunctionAppResource 'Microsoft.Web/sites@2023-12-01' existing = if (deploySilverGold) {
-  scope: rg
-  name: analyzerFunctionAppName
-}
-
 module functionAppWithAnalyzer 'modules/function.bicep' = if (deploySilverGold) {
   name: 'functionAppWithAnalyzerDeploy'
   scope: rg
@@ -79,7 +74,7 @@ module functionAppWithAnalyzer 'modules/function.bicep' = if (deploySilverGold) 
     location: location
     storageAccountName: webStorage.outputs.name
     analyzerFunctionAppName: analyzerFunctionAppName
-    analyzerFunctionKey: deploySilverGold ? listKeys('${analyzerFunctionAppResource.id}/host/default', '2023-12-01').functionKeys.default : ''
+    analyzerFunctionKey: deploySilverGold ? analyzerFunctionApp.outputs.functionAppDefaultKey : ''
   }
   dependsOn: [analyzerFunctionApp]
 }
@@ -165,8 +160,8 @@ output storageAccountId string = storage.outputs.id
 output webStorageAccountName string = webStorage.outputs.name
 output webStorageAccountId string = webStorage.outputs.id
 output webStorageWebEndpoint string = webStorage.outputs.webEndpoint
-output functionAppName string = functionApp.outputs.name
-output functionAppUrl string = functionApp.outputs.url
+output functionAppName string = deploySilverGold ? functionAppWithAnalyzer.outputs.name : functionApp.outputs.name
+output functionAppUrl string = deploySilverGold ? functionAppWithAnalyzer.outputs.url : functionApp.outputs.url
 
 // Silver & Gold Outputs (conditional)
 output cosmosAccountName string = deploySilverGold ? cosmosAccountName : 'not-deployed'
