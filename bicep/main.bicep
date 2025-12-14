@@ -60,9 +60,10 @@ module functionApp 'modules/function.bicep' = {
     name: functionAppName
     location: location
     storageAccountName: webStorage.outputs.name
-    analyzerFunctionAppName: deploySilverGold ? analyzerFunctionApp!.outputs.functionAppName : ''
-    analyzerFunctionKey: deploySilverGold ? analyzerFunctionApp!.outputs.functionAppDefaultKey : ''
+    analyzerFunctionAppName: deploySilverGold ? analyzerFunctionAppName : ''
+    analyzerFunctionKey: deploySilverGold ? listKeys('${rg.id}/providers/Microsoft.Web/sites/${analyzerFunctionAppName}/host/default', '2023-12-01').functionKeys.default : ''
   }
+  dependsOn: deploySilverGold ? [analyzerFunctionApp] : []
 }
 
 // Event Grid Subscription (commented out - deploy after code is deployed)
