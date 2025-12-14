@@ -53,17 +53,30 @@ module webStorage 'modules/storage-web.bicep' = {
 }
 
 // Function App (Preprocessor)
-module functionApp 'modules/function.bicep' = {
+module functionApp 'modules/function.bicep' = if (!deploySilverGold) {
   name: 'functionAppDeploy'
   scope: rg
   params: {
     name: functionAppName
     location: location
     storageAccountName: webStorage.outputs.name
-    analyzerFunctionAppName: deploySilverGold ? analyzerFunctionAppName : ''
-    analyzerFunctionKey: deploySilverGold ? listKeys('${rg.id}/providers/Microsoft.Web/sites/${analyzerFunctionAppName}/host/default', '2023-12-01').functionKeys.default : ''
+    analyzerFunctionAppName: ''
+    analyzerFunctionKey: ''
   }
-  dependsOn: deploySilverGold ? [analyzerFunctionApp] : []
+}
+
+// Function App (Preprocessor with Analyzer)
+module functionAppWithAnalyzer 'modules/function.bicep' = if (deploySilverGold) {
+  name: 'functionAppWithAnalyzerDeploy'
+  scope: rg
+  params: {
+    name: functionAppName
+    location: location
+    storageAccountName: webStorage.outputs.name
+    analyzerFunctionAppName: analyzerFunctionApp!.outputs.functionAppName
+    analyzerFunctionKey: analyzerFunctionApp!.outputs.functionAppDefaultKey
+  }
+  dependsOn: [analyzerFunctionApp]
 }
 
 // Event Grid Subscription (commented out - deploy after code is deployed)
