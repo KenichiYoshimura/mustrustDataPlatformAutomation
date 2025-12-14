@@ -80,6 +80,13 @@ az account set --subscription "$SUBSCRIPTION_ID"
 echo "Deleting resource group: $RESOURCE_GROUP (this may take a few minutes)..."
 az group delete --name "$RESOURCE_GROUP" --yes
 
+# Purge soft-deleted Cosmos DB to allow immediate recreation
+COSMOS_ACCOUNT_NAME="cosmos-mustrust-${CUSTOMER_NAME}-${ENVIRONMENT}"
+echo "Purging soft-deleted Cosmos DB: $COSMOS_ACCOUNT_NAME"
+az rest \
+  --method delete \
+  --uri "https://management.azure.com/subscriptions/${SUBSCRIPTION_ID}/providers/Microsoft.DocumentDB/locations/${LOCATION}/deletedAccounts/${COSMOS_ACCOUNT_NAME}?api-version=2023-04-15" 2>/dev/null || echo "  (No soft-deleted Cosmos DB found or already purged)"
+
 # Purge soft-deleted Cognitive Services to allow immediate recreation
 LANG_SERVICE_NAME="lang-mustrust-${CUSTOMER_NAME}-${ENVIRONMENT}"
 echo "Purging soft-deleted Cognitive Services: $LANG_SERVICE_NAME"
@@ -99,5 +106,6 @@ fi
 
 echo ""
 echo -e "${GREEN}✅ Cleanup complete${NC}"
-echo "Resource group has been deleted and Cognitive Services have been purged."
+echo "Resource group has been deleted."
+echo "Cosmos DB and Cognitive Services have been purged."
 echo "You can now run setup-environment.sh to create a fresh environment."
