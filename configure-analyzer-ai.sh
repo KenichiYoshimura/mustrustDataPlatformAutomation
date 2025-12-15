@@ -164,6 +164,29 @@ fi
 
 echo -e "${GREEN}✅ Custom Vision credentials retrieved${NC}"
 
+# Get Translator Text Service credentials
+echo -e "${BLUE}📥 Retrieving Translator Text Service credentials...${NC}"
+TRANSLATOR_ACCOUNT_NAME="trans-mustrust-${CUSTOMER_NAME}-${ENVIRONMENT}"
+TRANSLATOR_ENDPOINT=$(az cognitiveservices account show \
+  --name "$TRANSLATOR_ACCOUNT_NAME" \
+  --resource-group "$RESOURCE_GROUP" \
+  --query "properties.endpoint" -o tsv 2>/dev/null || echo "")
+
+TRANSLATOR_KEY=$(az cognitiveservices account keys list \
+  --name "$TRANSLATOR_ACCOUNT_NAME" \
+  --resource-group "$RESOURCE_GROUP" \
+  --query "key1" -o tsv 2>/dev/null || echo "")
+
+if [[ -z "$TRANSLATOR_ENDPOINT" ]] || [[ -z "$TRANSLATOR_KEY" ]]; then
+  echo -e "${YELLOW}⚠️  Translator not found or not yet available - skipping${NC}"
+  AZURE_TRANSLATOR_ENDPOINT=""
+  AZURE_TRANSLATOR_KEY=""
+else
+  AZURE_TRANSLATOR_ENDPOINT="$TRANSLATOR_ENDPOINT"
+  AZURE_TRANSLATOR_KEY="$TRANSLATOR_KEY"
+  echo -e "${GREEN}✅ Translator credentials retrieved${NC}"
+fi
+
 # Configure Function App settings
 echo ""
 echo -e "${BLUE}⚙️  Configuring Function App settings...${NC}"

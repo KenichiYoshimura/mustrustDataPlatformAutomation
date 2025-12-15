@@ -5,7 +5,7 @@ using './main.bicep'
 // Or use AZURE_SUBSCRIPTION_ID environment variable in deploy.sh
 
 // Basic Configuration
-param customerName = 'yys'
+param customerName = 'hcs'
 param environment = 'prod'
 param location = 'japaneast'   // Azure region
 

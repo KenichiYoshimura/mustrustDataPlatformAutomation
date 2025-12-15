@@ -95,6 +95,14 @@ az cognitiveservices account purge \
   --resource-group "$RESOURCE_GROUP" \
   --location "$LOCATION" 2>/dev/null || echo "  (No soft-deleted Cognitive Services found or already purged)"
 
+# Purge soft-deleted Translator to allow immediate recreation
+TRANSLATOR_NAME="trans-mustrust-${CUSTOMER_NAME}-${ENVIRONMENT}"
+echo "Purging soft-deleted Translator: $TRANSLATOR_NAME"
+az cognitiveservices account purge \
+  --name "$TRANSLATOR_NAME" \
+  --resource-group "$RESOURCE_GROUP" \
+  --location "$LOCATION" 2>/dev/null || echo "  (No soft-deleted Translator found or already purged)"
+
 # Delete service principal
 SP_ID=$(az ad sp list --display-name "$SP_NAME" --query "[0].id" -o tsv 2>/dev/null)
 if [[ -n "$SP_ID" ]]; then

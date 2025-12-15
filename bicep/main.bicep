@@ -15,6 +15,7 @@ var functionAppName = 'func-mustrust-preprocessor-${customerName}-${environment}
 var cosmosAccountName = 'cosmos-mustrust-${customerName}-${environment}'
 var analyzerFunctionAppName = 'func-mustrust-analyzer-${customerName}-${environment}'
 var languageServiceName = 'lang-mustrust-${customerName}-${environment}'
+var translatorAccountName = 'trans-mustrust-${customerName}-${environment}'
 
 // Resource Group
 resource rg 'Microsoft.Resources/resourceGroups@2023-07-01' = {
@@ -125,6 +126,21 @@ module languageService 'modules/language-services.bicep' = if (deploySilverGold)
   }
 }
 
+// Translator Text Service
+module translator 'modules/translator.bicep' = if (deploySilverGold) {
+  name: 'translatorDeploy'
+  scope: rg
+  params: {
+    translatorAccountName: translatorAccountName
+    location: location
+    tags: {
+      Environment: environment
+      Customer: customerName
+      Project: 'MusTrusT'
+    }
+  }
+}
+
 // Analyzer Function App (Silver + Gold + Reports - All in One)
 module analyzerFunctionApp 'modules/function-analyzer.bicep' = if (deploySilverGold) {
   name: 'analyzerFunctionAppDeploy'
@@ -150,6 +166,7 @@ module analyzerFunctionApp 'modules/function-analyzer.bicep' = if (deploySilverG
   dependsOn: [
     cosmosDb
     languageService
+    translator
   ]
 }
 
