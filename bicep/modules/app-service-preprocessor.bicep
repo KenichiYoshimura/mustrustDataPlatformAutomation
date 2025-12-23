@@ -1,7 +1,7 @@
-// Azure App Service Module - Preprocessor (Standard S1, Linux, Node.js 18-lts)
+// Azure App Service Module - Preprocessor (Standard S1, Linux, Node.js 20-lts)
 // Purpose: Host Node.js Frontend + API Gateway with Easy Auth integration
 // Platform: Linux App Service Standard S1 (supports Easy Auth fully, cost-optimized, modern npm)
-// Runtime: Node.js 18-lts (primary), Python 3.11 (system tool for PDF conversion)
+// Runtime: Node.js 20-lts LTS (primary), Python 3.11 (system tool for PDF conversion)
 
 param name string
 param location string
@@ -93,7 +93,7 @@ resource appService 'Microsoft.Web/sites@2023-12-01' = {
     clientAffinityEnabled: false
     publicNetworkAccess: 'Enabled'
     siteConfig: {
-      linuxFxVersion: 'NODE|18-lts'
+      linuxFxVersion: 'NODE|20-lts'
       alwaysOn: true
       use32BitWorkerProcess: false
       managedPipelineMode: 'Integrated'
