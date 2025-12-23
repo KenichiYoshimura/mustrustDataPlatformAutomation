@@ -89,7 +89,7 @@ echo ""
 
 # Compute resource names
 RESOURCE_GROUP="rg-mustrust-${CUSTOMER_NAME}-${ENVIRONMENT}"
-FUNCTION_APP="func-mustrust-preprocessor-${CUSTOMER_NAME}-${ENVIRONMENT}"
+APP_SERVICE_PREPROCESSOR="app-mustrust-preprocessor-${CUSTOMER_NAME}-${ENVIRONMENT}"
 ANALYZER_FUNCTION_APP="func-mustrust-analyzer-${CUSTOMER_NAME}-${ENVIRONMENT}"
 WEB_STORAGE_ACCOUNT="stmustrustweb${CUSTOMER_NAME}${ENVIRONMENT}"
 ANALYZER_STORAGE_ACCOUNT="stmustrust${CUSTOMER_NAME}${ENVIRONMENT}"
@@ -99,7 +99,7 @@ echo -e "${YELLOW}📝 Resources to be created:${NC}"
 echo "  Resource Group:     $RESOURCE_GROUP"
 echo "  Web Storage:        $WEB_STORAGE_ACCOUNT (frontend + uploads)"
 echo "  Analyzer Storage:   $ANALYZER_STORAGE_ACCOUNT (processing + data)"
-echo "  Preprocessor App:   $FUNCTION_APP"
+echo "  Preprocessor (App Service S1): $APP_SERVICE_PREPROCESSOR (with Easy Auth)"
 if [[ "$DEPLOY_ANALYZER" == "true" ]]; then
   echo "  Analyzer App:       $ANALYZER_FUNCTION_APP"
 fi
@@ -143,6 +143,14 @@ param storageAccountSku = 'Standard_LRS' // Standard_LRS is cheapest
 // Silver & Gold Layer Deployment
 // Set to true to deploy Cosmos DB and Silver/Gold Function Apps
 param deploySilverGold = ${DEPLOY_ANALYZER}
+
+// App Service Preprocessor Deployment (Windows S1 with Easy Auth)
+param deployAppServicePreprocessor = true
+
+// Azure AD Configuration for Easy Auth
+param aadTenantId = ''
+param aadClientId = ''
+param aadClientSecret = ''
 EOF
 echo -e "${GREEN}✅ Parameters updated${NC}"
 
@@ -205,7 +213,8 @@ echo "  • Analyzer Storage: $ANALYZER_STORAGE_ACCOUNT"
 echo "    - Containers: bronze-processed-files, bronze-invalid-files"
 echo "    - Queue: bronze-file-processing-queue"
 echo ""
-echo "  • Function App (Preprocessor): $FUNCTION_APP"
+echo "  • App Service (Preprocessor): $APP_SERVICE_PREPROCESSOR"
+echo "    - Type: Windows S1 with Easy Auth support"
 echo "    - Reads from: $WEB_STORAGE_ACCOUNT/web-input-files"
 echo "    - Writes to: $ANALYZER_STORAGE_ACCOUNT/bronze-processed-files"
 if [[ "$DEPLOY_ANALYZER" == "true" ]]; then
@@ -275,9 +284,9 @@ else
   echo "2️⃣  Deploy Application Code"
 fi
 echo "══════════════════════════════════════════════════════"
-echo "   Preprocessor:"
+echo "   Preprocessor (App Service):"
 echo "   cd mustrustDataPlatformProcessor"
-echo "   func azure functionapp publish $FUNCTION_APP"
+echo "   az webapp up --resource-group $RESOURCE_GROUP --name $APP_SERVICE_PREPROCESSOR --runtime PYTHON:3.11"
 echo ""
 if [[ "$DEPLOY_ANALYZER" == "true" ]]; then
   echo "   Analyzer:"
@@ -298,8 +307,11 @@ else
   echo "3️⃣  Setup EventGrid (after code deployment)"
 fi
 echo "══════════════════════════════════════════════════════"
-echo "   cd MusTrusTDataPlatformInfra"
-echo "   ./setup-eventgrid.sh"
+echo "   Note: Event Grid is only needed if Analyzer is deployed"
+if [[ "$DEPLOY_ANALYZER" == "true" ]]; then
+  echo "   cd MusTrusTDataPlatformInfra"
+  echo "   ./setup-eventgrid.sh"
+fi
 echo ""
 echo -e "${YELLOW}⚠️  Security Note:${NC}"
 echo "  The credentials file contains sensitive information."

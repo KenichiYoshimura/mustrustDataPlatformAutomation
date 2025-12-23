@@ -88,5 +88,6 @@ resource silverGoldProcessingQueue 'Microsoft.Storage/storageAccounts/queueServi
 // Outputs
 output id string = storageAccount.id
 output name string = storageAccount.name
+output accountKey string = storageAccount.listKeys().keys[0].value
 output primaryEndpoints object = storageAccount.properties.primaryEndpoints
 output webEndpoint string = enableStaticWebsite ? storageAccount.properties.primaryEndpoints.web : ''

@@ -1,4 +1,4 @@
-targetScope = 'subscription'
+targetScope = 'resourceGroup'
 
 // Parameters
 param customerName string
@@ -7,31 +7,26 @@ param location string
 param storageAccountSku string
 param deploySilverGold bool = false // Flag to deploy Silver/Gold layers
 
+// App Service Preprocessor parameters (Linux S1)
+param deployAppServicePreprocessor bool = false // Flag to deploy new App Service Standard S1 Preprocessor
+param aadTenantId string = '' // Azure AD tenant ID for Easy Auth
+param aadClientId string = '' // Azure AD app client ID for Easy Auth
+@secure()
+param aadClientSecret string = '' // Azure AD app client secret for Easy Auth
+
 // Variables
-var resourceGroupName = 'rg-mustrust-${customerName}-${environment}'
 var storageAccountName = 'stmustrust${customerName}${environment}'
 var webStorageAccountName = 'stmustrustweb${customerName}${environment}'
 var functionAppName = 'func-mustrust-preprocessor-${customerName}-${environment}'
+var appServicePreprocessorName = 'app-mustrust-preprocessor-${customerName}-${environment}' // New App Service (Linux S1)
 var cosmosAccountName = 'cosmos-mustrust-${customerName}-${environment}'
 var analyzerFunctionAppName = 'func-mustrust-analyzer-${customerName}-${environment}'
 var languageServiceName = 'lang-mustrust-${customerName}-${environment}'
 var translatorAccountName = 'trans-mustrust-${customerName}-${environment}'
 
-// Resource Group
-resource rg 'Microsoft.Resources/resourceGroups@2023-07-01' = {
-  name: resourceGroupName
-  location: location
-  tags: {
-    Environment: environment
-    Customer: customerName
-    Project: 'MusTrusT'
-  }
-}
-
 // Storage Account (for Analyzer)
 module storage 'modules/storage.bicep' = {
   name: 'storageDeploy'
-  scope: rg
   params: {
     name: storageAccountName
     location: location
@@ -43,7 +38,6 @@ module storage 'modules/storage.bicep' = {
 // Web Storage Account (for Frontend & Preprocessor)
 module webStorage 'modules/storage-web.bicep' = {
   name: 'webStorageDeploy'
-  scope: rg
   params: {
     name: webStorageAccountName
     location: location
@@ -53,48 +47,31 @@ module webStorage 'modules/storage-web.bicep' = {
   }
 }
 
-// Function App (Preprocessor)
-module functionApp 'modules/function.bicep' = if (!deploySilverGold) {
-  name: 'functionAppDeploy'
-  scope: rg
-  params: {
-    name: functionAppName
-    location: location
-    storageAccountName: webStorage.outputs.name
-    analyzerFunctionAppName: ''
-    analyzerFunctionKey: ''
-  }
-}
+// NOTE: Function App for Preprocessor has been removed.
+// Using App Service S1 (Windows) instead per migration plan.
+// See PREPROCESSOR_MIGRATION.md for details on why Easy Auth requires App Service.
 
-// Function App (Preprocessor with Analyzer) - deployed after analyzer is ready
-module functionAppWithAnalyzer 'modules/function.bicep' = if (deploySilverGold) {
-  name: 'functionAppWithAnalyzerDeploy'
-  scope: rg
+// App Service Standard S1 (Linux) - NEW Preprocessor Platform
+module appServicePreprocessor 'modules/app-service-preprocessor.bicep' = if (deployAppServicePreprocessor) {
+  name: 'appServicePreprocessorDeploy'
   params: {
-    name: functionAppName
+    name: appServicePreprocessorName
     location: location
     storageAccountName: webStorage.outputs.name
+    aadTenantId: aadTenantId
+    aadClientId: aadClientId
+    aadClientSecret: aadClientSecret
     analyzerFunctionAppName: analyzerFunctionAppName
-    analyzerFunctionKey: deploySilverGold ? analyzerFunctionApp.outputs.functionAppDefaultKey : ''
+    analyzerQueueName: 'bronze-processing'
+    analyzerStorageAccountName: storageAccountName
+    analyzerStorageAccountKey: storage.outputs.accountKey
+    appInsightsName: '${appServicePreprocessorName}-insights'
   }
-  dependsOn: [analyzerFunctionApp]
 }
-
-// Event Grid Subscription (commented out - deploy after code is deployed)
-// module eventGrid 'modules/eventgrid.bicep' = {
-//   name: 'eventGridDeploy'
-//   scope: rg
-//   params: {
-//     storageAccountName: webStorage.outputs.name
-//     functionAppName: functionApp.outputs.name
-//     containerName: 'web-input-files'
-//   }
-// }
 
 // Cosmos DB (Silver & Gold Layers)
 module cosmosDb 'modules/cosmos-db.bicep' = if (deploySilverGold) {
   name: 'cosmosDbDeploy'
-  scope: rg
   params: {
     cosmosAccountName: cosmosAccountName
     location: location
@@ -113,7 +90,6 @@ module cosmosDb 'modules/cosmos-db.bicep' = if (deploySilverGold) {
 // Language Services (Sentiment + Translation)
 module languageService 'modules/language-services.bicep' = if (deploySilverGold) {
   name: 'languageServiceDeploy'
-  scope: rg
   params: {
     name: languageServiceName
     location: location
@@ -129,7 +105,6 @@ module languageService 'modules/language-services.bicep' = if (deploySilverGold)
 // Translator Text Service
 module translator 'modules/translator.bicep' = if (deploySilverGold) {
   name: 'translatorDeploy'
-  scope: rg
   params: {
     translatorAccountName: translatorAccountName
     location: location
@@ -144,7 +119,6 @@ module translator 'modules/translator.bicep' = if (deploySilverGold) {
 // Analyzer Function App (Silver + Gold + Reports - All in One)
 module analyzerFunctionApp 'modules/function-analyzer.bicep' = if (deploySilverGold) {
   name: 'analyzerFunctionAppDeploy'
-  scope: rg
   params: {
     name: analyzerFunctionAppName
     location: location
@@ -171,15 +145,12 @@ module analyzerFunctionApp 'modules/function-analyzer.bicep' = if (deploySilverG
 }
 
 // Outputs
-output resourceGroupName string = rg.name
 output storageAccountName string = storage.outputs.name
 output storageAccountId string = storage.outputs.id
 output webStorageAccountName string = webStorage.outputs.name
 output webStorageAccountId string = webStorage.outputs.id
 output webStorageWebEndpoint string = webStorage.outputs.webEndpoint
-output functionAppName string = deploySilverGold ? functionAppWithAnalyzer.outputs.name : functionApp.outputs.name
-output functionAppUrl string = deploySilverGold ? functionAppWithAnalyzer.outputs.url : functionApp.outputs.url
 
-// Silver & Gold Outputs (conditional)
-output cosmosAccountName string = deploySilverGold ? cosmosAccountName : 'not-deployed'
-output analyzerFunctionAppName string = deploySilverGold ? analyzerFunctionAppName : 'not-deployed'
+// Note: App Service and Function App outputs available in Azure Portal
+// - App Service Name: app-mustrust-preprocessor-{customer}-{environment}
+// - Resource Group: rg-mustrust-{customer}-{environment}

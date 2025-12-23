@@ -49,11 +49,16 @@ echo ""
 echo "📝 Using parameters from: bicep/main.bicepparam"
 echo ""
 
-# Deploy
-echo "📦 Deploying storage account..."
-az deployment sub create \
-    --name "mustrust-storage-$(date +%Y%m%d-%H%M%S)" \
-    --location japaneast \
+# Create resource group first
+RG_NAME="rg-mustrust-yys-dev"
+echo "📦 Creating resource group: $RG_NAME"
+az group create --name "$RG_NAME" --location japaneast > /dev/null 2>&1 || true
+
+# Deploy to resource group scope
+echo "📦 Deploying infrastructure..."
+az deployment group create \
+    --name "mustrust-deploy-$(date +%Y%m%d-%H%M%S)" \
+    --resource-group "$RG_NAME" \
     --template-file bicep/main.bicep \
     --parameters bicep/main.bicepparam
 

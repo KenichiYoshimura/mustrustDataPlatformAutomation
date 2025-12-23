@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "15080038916761885393"
+      "templateHash": "11548066124224579720"
     }
   },
   "parameters": {
@@ -25,6 +25,22 @@
     "deploySilverGold": {
       "type": "bool",
       "defaultValue": false
+    },
+    "deployAppServicePreprocessor": {
+      "type": "bool",
+      "defaultValue": false
+    },
+    "aadTenantId": {
+      "type": "string",
+      "defaultValue": ""
+    },
+    "aadClientId": {
+      "type": "string",
+      "defaultValue": ""
+    },
+    "aadClientSecret": {
+      "type": "securestring",
+      "defaultValue": ""
     }
   },
   "variables": {
@@ -32,9 +48,11 @@
     "storageAccountName": "[format('stmustrust{0}{1}', parameters('customerName'), parameters('environment'))]",
     "webStorageAccountName": "[format('stmustrustweb{0}{1}', parameters('customerName'), parameters('environment'))]",
     "functionAppName": "[format('func-mustrust-preprocessor-{0}-{1}', parameters('customerName'), parameters('environment'))]",
+    "appServicePreprocessorName": "[format('app-mustrust-preprocessor-{0}-{1}', parameters('customerName'), parameters('environment'))]",
     "cosmosAccountName": "[format('cosmos-mustrust-{0}-{1}', parameters('customerName'), parameters('environment'))]",
     "analyzerFunctionAppName": "[format('func-mustrust-analyzer-{0}-{1}', parameters('customerName'), parameters('environment'))]",
-    "languageServiceName": "[format('lang-mustrust-{0}-{1}', parameters('customerName'), parameters('environment'))]"
+    "languageServiceName": "[format('lang-mustrust-{0}-{1}', parameters('customerName'), parameters('environment'))]",
+    "translatorAccountName": "[format('trans-mustrust-{0}-{1}', parameters('customerName'), parameters('environment'))]"
   },
   "resources": {
     "rg": {
@@ -47,17 +65,6 @@
         "Customer": "[parameters('customerName')]",
         "Project": "MusTrusT"
       }
-    },
-    "analyzerFunctionAppResource": {
-      "condition": "[parameters('deploySilverGold')]",
-      "existing": true,
-      "type": "Microsoft.Web/sites",
-      "apiVersion": "2023-12-01",
-      "resourceGroup": "[variables('resourceGroupName')]",
-      "name": "[variables('analyzerFunctionAppName')]",
-      "dependsOn": [
-        "rg"
-      ]
     },
     "storage": {
       "type": "Microsoft.Resources/deployments",
@@ -90,7 +97,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.39.26.7824",
-              "templateHash": "13578531446838672141"
+              "templateHash": "2156246698565628086"
             }
           },
           "parameters": {
@@ -196,6 +203,10 @@
             "name": {
               "type": "string",
               "value": "[parameters('name')]"
+            },
+            "accountKey": {
+              "type": "string",
+              "value": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('name')), '2023-01-01').keys[0].value]"
             },
             "primaryEndpoints": {
               "type": "object",
@@ -336,11 +347,11 @@
         "rg"
       ]
     },
-    "functionApp": {
-      "condition": "[not(parameters('deploySilverGold'))]",
+    "appServicePreprocessor": {
+      "condition": "[parameters('deployAppServicePreprocessor')]",
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
-      "name": "functionAppDeploy",
+      "name": "appServicePreprocessorDeploy",
       "resourceGroup": "[variables('resourceGroupName')]",
       "properties": {
         "expressionEvaluationOptions": {
@@ -349,7 +360,7 @@
         "mode": "Incremental",
         "parameters": {
           "name": {
-            "value": "[variables('functionAppName')]"
+            "value": "[variables('appServicePreprocessorName')]"
           },
           "location": {
             "value": "[parameters('location')]"
@@ -357,187 +368,30 @@
           "storageAccountName": {
             "value": "[reference('webStorage').outputs.name.value]"
           },
-          "analyzerFunctionAppName": {
-            "value": ""
+          "aadTenantId": {
+            "value": "[parameters('aadTenantId')]"
           },
-          "analyzerFunctionKey": {
-            "value": ""
-          }
-        },
-        "template": {
-          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-          "contentVersion": "1.0.0.0",
-          "metadata": {
-            "_generator": {
-              "name": "bicep",
-              "version": "0.39.26.7824",
-              "templateHash": "15708574957300307595"
-            }
+          "aadClientId": {
+            "value": "[parameters('aadClientId')]"
           },
-          "parameters": {
-            "name": {
-              "type": "string"
-            },
-            "location": {
-              "type": "string"
-            },
-            "storageAccountName": {
-              "type": "string"
-            },
-            "analyzerFunctionAppName": {
-              "type": "string",
-              "defaultValue": ""
-            },
-            "analyzerFunctionKey": {
-              "type": "string",
-              "defaultValue": ""
-            },
-            "appInsightsName": {
-              "type": "string",
-              "defaultValue": "[format('{0}-insights', parameters('name'))]"
-            }
-          },
-          "variables": {
-            "analyzerBackendSettings": "[if(not(equals(parameters('analyzerFunctionAppName'), '')), createArray(createObject('name', 'ANALYZER_FUNCTION_URL', 'value', format('https://{0}.azurewebsites.net', parameters('analyzerFunctionAppName'))), createObject('name', 'ANALYZER_FUNCTION_KEY', 'value', parameters('analyzerFunctionKey'))), createArray())]"
-          },
-          "resources": [
-            {
-              "type": "Microsoft.OperationalInsights/workspaces",
-              "apiVersion": "2023-09-01",
-              "name": "[format('{0}-logs', parameters('name'))]",
-              "location": "[parameters('location')]",
-              "properties": {
-                "sku": {
-                  "name": "PerGB2018"
-                },
-                "retentionInDays": 30
-              }
-            },
-            {
-              "type": "Microsoft.Insights/components",
-              "apiVersion": "2020-02-02",
-              "name": "[parameters('appInsightsName')]",
-              "location": "[parameters('location')]",
-              "kind": "web",
-              "properties": {
-                "Application_Type": "web",
-                "Request_Source": "rest",
-                "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-logs', parameters('name')))]"
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-logs', parameters('name')))]"
-              ]
-            },
-            {
-              "type": "Microsoft.Web/serverfarms",
-              "apiVersion": "2023-12-01",
-              "name": "[format('{0}-plan', parameters('name'))]",
-              "location": "[parameters('location')]",
-              "kind": "functionapp",
-              "sku": {
-                "name": "FC1",
-                "tier": "FlexConsumption"
-              },
-              "properties": {
-                "reserved": true
-              }
-            },
-            {
-              "type": "Microsoft.Web/sites",
-              "apiVersion": "2023-12-01",
-              "name": "[parameters('name')]",
-              "location": "[parameters('location')]",
-              "kind": "functionapp,linux",
-              "properties": {
-                "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', format('{0}-plan', parameters('name')))]",
-                "functionAppConfig": {
-                  "deployment": {
-                    "storage": {
-                      "type": "blobContainer",
-                      "value": "[format('https://{0}.blob.{1}/{2}', parameters('storageAccountName'), environment().suffixes.storage, parameters('name'))]",
-                      "authentication": {
-                        "type": "StorageAccountConnectionString",
-                        "storageAccountConnectionStringName": "DEPLOYMENT_STORAGE_CONNECTION_STRING"
-                      }
-                    }
-                  },
-                  "scaleAndConcurrency": {
-                    "maximumInstanceCount": 100,
-                    "instanceMemoryMB": 2048
-                  },
-                  "runtime": {
-                    "name": "python",
-                    "version": "3.11"
-                  }
-                },
-                "siteConfig": {
-                  "appSettings": "[concat(createArray(createObject('name', 'AzureWebJobsStorage', 'value', format('DefaultEndpointsProtocol=https;AccountName={0};EndpointSuffix={1};AccountKey={2}', parameters('storageAccountName'), environment().suffixes.storage, listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-01-01').keys[0].value)), createObject('name', 'DEPLOYMENT_STORAGE_CONNECTION_STRING', 'value', format('DefaultEndpointsProtocol=https;AccountName={0};EndpointSuffix={1};AccountKey={2}', parameters('storageAccountName'), environment().suffixes.storage, listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-01-01').keys[0].value)), createObject('name', 'FUNCTIONS_EXTENSION_VERSION', 'value', '~4'), createObject('name', 'APPINSIGHTS_INSTRUMENTATIONKEY', 'value', reference(resourceId('Microsoft.Insights/components', parameters('appInsightsName')), '2020-02-02').InstrumentationKey), createObject('name', 'APPLICATIONINSIGHTS_CONNECTION_STRING', 'value', reference(resourceId('Microsoft.Insights/components', parameters('appInsightsName')), '2020-02-02').ConnectionString)), variables('analyzerBackendSettings'))]"
-                }
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.Insights/components', parameters('appInsightsName'))]",
-                "[resourceId('Microsoft.Web/serverfarms', format('{0}-plan', parameters('name')))]"
-              ]
-            }
-          ],
-          "outputs": {
-            "id": {
-              "type": "string",
-              "value": "[resourceId('Microsoft.Web/sites', parameters('name'))]"
-            },
-            "name": {
-              "type": "string",
-              "value": "[parameters('name')]"
-            },
-            "url": {
-              "type": "string",
-              "value": "[format('https://{0}', reference(resourceId('Microsoft.Web/sites', parameters('name')), '2023-12-01').defaultHostName)]"
-            },
-            "appInsightsId": {
-              "type": "string",
-              "value": "[resourceId('Microsoft.Insights/components', parameters('appInsightsName'))]"
-            },
-            "appInsightsName": {
-              "type": "string",
-              "value": "[parameters('appInsightsName')]"
-            },
-            "appInsightsInstrumentationKey": {
-              "type": "string",
-              "value": "[reference(resourceId('Microsoft.Insights/components', parameters('appInsightsName')), '2020-02-02').InstrumentationKey]"
-            }
-          }
-        }
-      },
-      "dependsOn": [
-        "rg",
-        "webStorage"
-      ]
-    },
-    "functionAppWithAnalyzer": {
-      "condition": "[parameters('deploySilverGold')]",
-      "type": "Microsoft.Resources/deployments",
-      "apiVersion": "2025-04-01",
-      "name": "functionAppWithAnalyzerDeploy",
-      "resourceGroup": "[variables('resourceGroupName')]",
-      "properties": {
-        "expressionEvaluationOptions": {
-          "scope": "inner"
-        },
-        "mode": "Incremental",
-        "parameters": {
-          "name": {
-            "value": "[variables('functionAppName')]"
-          },
-          "location": {
-            "value": "[parameters('location')]"
-          },
-          "storageAccountName": {
-            "value": "[reference('webStorage').outputs.name.value]"
+          "aadClientSecret": {
+            "value": "[parameters('aadClientSecret')]"
           },
           "analyzerFunctionAppName": {
             "value": "[variables('analyzerFunctionAppName')]"
           },
-          "analyzerFunctionKey": "[if(parameters('deploySilverGold'), createObject('value', listKeys(format('{0}/host/default', extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('resourceGroupName')), 'Microsoft.Web/sites', variables('analyzerFunctionAppName'))), '2023-12-01').functionKeys.default), createObject('value', ''))]"
+          "analyzerQueueName": {
+            "value": "bronze-processing"
+          },
+          "analyzerStorageAccountName": {
+            "value": "[variables('storageAccountName')]"
+          },
+          "analyzerStorageAccountKey": {
+            "value": "[reference('storage').outputs.accountKey.value]"
+          },
+          "appInsightsName": {
+            "value": "[format('{0}-insights', variables('appServicePreprocessorName'))]"
+          }
         },
         "template": {
           "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
@@ -546,7 +400,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.39.26.7824",
-              "templateHash": "15708574957300307595"
+              "templateHash": "11559825079123543859"
             }
           },
           "parameters": {
@@ -559,21 +413,35 @@
             "storageAccountName": {
               "type": "string"
             },
+            "aadTenantId": {
+              "type": "string"
+            },
+            "aadClientId": {
+              "type": "string"
+            },
+            "aadClientSecret": {
+              "type": "securestring"
+            },
             "analyzerFunctionAppName": {
               "type": "string",
               "defaultValue": ""
             },
-            "analyzerFunctionKey": {
+            "analyzerQueueName": {
               "type": "string",
+              "defaultValue": "bronze-processing"
+            },
+            "analyzerStorageAccountName": {
+              "type": "string",
+              "defaultValue": ""
+            },
+            "analyzerStorageAccountKey": {
+              "type": "securestring",
               "defaultValue": ""
             },
             "appInsightsName": {
               "type": "string",
               "defaultValue": "[format('{0}-insights', parameters('name'))]"
             }
-          },
-          "variables": {
-            "analyzerBackendSettings": "[if(not(equals(parameters('analyzerFunctionAppName'), '')), createArray(createObject('name', 'ANALYZER_FUNCTION_URL', 'value', format('https://{0}.azurewebsites.net', parameters('analyzerFunctionAppName'))), createObject('name', 'ANALYZER_FUNCTION_KEY', 'value', parameters('analyzerFunctionKey'))), createArray())]"
           },
           "resources": [
             {
@@ -604,17 +472,24 @@
               ]
             },
             {
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+              "apiVersion": "2023-01-31",
+              "name": "[format('{0}-identity', parameters('name'))]",
+              "location": "[parameters('location')]"
+            },
+            {
               "type": "Microsoft.Web/serverfarms",
               "apiVersion": "2023-12-01",
               "name": "[format('{0}-plan', parameters('name'))]",
               "location": "[parameters('location')]",
-              "kind": "functionapp",
+              "kind": "app",
               "sku": {
-                "name": "FC1",
-                "tier": "FlexConsumption"
+                "name": "S1",
+                "tier": "Standard",
+                "capacity": 1
               },
               "properties": {
-                "reserved": true
+                "reserved": false
               }
             },
             {
@@ -622,70 +497,135 @@
               "apiVersion": "2023-12-01",
               "name": "[parameters('name')]",
               "location": "[parameters('location')]",
-              "kind": "functionapp,linux",
+              "kind": "app",
+              "identity": {
+                "type": "UserAssigned",
+                "userAssignedIdentities": {
+                  "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-identity', parameters('name'))))]": {}
+                }
+              },
               "properties": {
                 "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', format('{0}-plan', parameters('name')))]",
-                "functionAppConfig": {
-                  "deployment": {
-                    "storage": {
-                      "type": "blobContainer",
-                      "value": "[format('https://{0}.blob.{1}/{2}', parameters('storageAccountName'), environment().suffixes.storage, parameters('name'))]",
-                      "authentication": {
-                        "type": "StorageAccountConnectionString",
-                        "storageAccountConnectionStringName": "DEPLOYMENT_STORAGE_CONNECTION_STRING"
-                      }
-                    }
-                  },
-                  "scaleAndConcurrency": {
-                    "maximumInstanceCount": 100,
-                    "instanceMemoryMB": 2048
-                  },
-                  "runtime": {
-                    "name": "python",
-                    "version": "3.11"
-                  }
-                },
+                "httpsOnly": true,
+                "clientAffinityEnabled": false,
+                "publicNetworkAccess": "Enabled",
                 "siteConfig": {
-                  "appSettings": "[concat(createArray(createObject('name', 'AzureWebJobsStorage', 'value', format('DefaultEndpointsProtocol=https;AccountName={0};EndpointSuffix={1};AccountKey={2}', parameters('storageAccountName'), environment().suffixes.storage, listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-01-01').keys[0].value)), createObject('name', 'DEPLOYMENT_STORAGE_CONNECTION_STRING', 'value', format('DefaultEndpointsProtocol=https;AccountName={0};EndpointSuffix={1};AccountKey={2}', parameters('storageAccountName'), environment().suffixes.storage, listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-01-01').keys[0].value)), createObject('name', 'FUNCTIONS_EXTENSION_VERSION', 'value', '~4'), createObject('name', 'APPINSIGHTS_INSTRUMENTATIONKEY', 'value', reference(resourceId('Microsoft.Insights/components', parameters('appInsightsName')), '2020-02-02').InstrumentationKey), createObject('name', 'APPLICATIONINSIGHTS_CONNECTION_STRING', 'value', reference(resourceId('Microsoft.Insights/components', parameters('appInsightsName')), '2020-02-02').ConnectionString)), variables('analyzerBackendSettings'))]"
+                  "netFrameworkVersion": "v4.0",
+                  "nodeVersion": "22-lts",
+                  "alwaysOn": true,
+                  "use32BitWorkerProcess": false,
+                  "managedPipelineMode": "Integrated",
+                  "httpLoggingEnabled": true,
+                  "detailedErrorLoggingEnabled": true
                 }
               },
               "dependsOn": [
+                "[resourceId('Microsoft.Web/serverfarms', format('{0}-plan', parameters('name')))]",
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-identity', parameters('name')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Web/sites/config",
+              "apiVersion": "2023-12-01",
+              "name": "[format('{0}/{1}', parameters('name'), 'appsettings')]",
+              "properties": {
+                "WEBSITE_RUN_FROM_PACKAGE": "1",
+                "NODE_ENV": "production",
+                "NODE_OPTIONS": "--max-old-space-size=1536",
+                "APPINSIGHTS_INSTRUMENTATIONKEY": "[reference(resourceId('Microsoft.Insights/components', parameters('appInsightsName')), '2020-02-02').InstrumentationKey]",
+                "APPLICATIONINSIGHTS_CONNECTION_STRING": "[reference(resourceId('Microsoft.Insights/components', parameters('appInsightsName')), '2020-02-02').ConnectionString]",
+                "STORAGE_ACCOUNT_NAME": "[parameters('storageAccountName')]",
+                "STORAGE_ACCOUNT_KEY": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-01-01').keys[0].value]",
+                "ANALYZER_QUEUE_NAME": "[parameters('analyzerQueueName')]",
+                "ANALYZER_STORAGE_ACCOUNT_NAME": "[parameters('analyzerStorageAccountName')]",
+                "ANALYZER_STORAGE_ACCOUNT_KEY": "[parameters('analyzerStorageAccountKey')]",
+                "ANALYZER_FUNCTION_URL": "[format('https://{0}.azurewebsites.net', parameters('analyzerFunctionAppName'))]",
+                "AAD_TENANT_ID": "[parameters('aadTenantId')]",
+                "AAD_CLIENT_ID": "[parameters('aadClientId')]",
+                "AAD_CLIENT_SECRET": "[parameters('aadClientSecret')]"
+              },
+              "dependsOn": [
                 "[resourceId('Microsoft.Insights/components', parameters('appInsightsName'))]",
-                "[resourceId('Microsoft.Web/serverfarms', format('{0}-plan', parameters('name')))]"
+                "[resourceId('Microsoft.Web/sites', parameters('name'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Web/sites/config",
+              "apiVersion": "2023-12-01",
+              "name": "[format('{0}/{1}', parameters('name'), 'authsettingsV2')]",
+              "properties": {
+                "platform": {
+                  "enabled": true
+                },
+                "globalValidation": {
+                  "requireAuthentication": true,
+                  "redirectToProvider": "AzureActiveDirectory",
+                  "unauthenticatedClientAction": "RedirectToLoginPage"
+                },
+                "login": {
+                  "tokenStore": {
+                    "enabled": true
+                  },
+                  "allowedExternalRedirectUrls": [
+                    "http://localhost:3000",
+                    "https://localhost:3000"
+                  ]
+                },
+                "httpSettings": {
+                  "requireHttps": true,
+                  "forwardProxy": {
+                    "convention": "NoProxy"
+                  }
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('name'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Web/sites/config",
+              "apiVersion": "2023-12-01",
+              "name": "[format('{0}/{1}', parameters('name'), 'web')]",
+              "properties": {
+                "cors": {
+                  "allowedOrigins": [
+                    "*"
+                  ],
+                  "supportCredentials": false
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('name'))]"
               ]
             }
           ],
           "outputs": {
-            "id": {
+            "appServiceId": {
               "type": "string",
               "value": "[resourceId('Microsoft.Web/sites', parameters('name'))]"
             },
-            "name": {
+            "appServiceName": {
               "type": "string",
               "value": "[parameters('name')]"
             },
-            "url": {
+            "appServiceUrl": {
               "type": "string",
               "value": "[format('https://{0}', reference(resourceId('Microsoft.Web/sites', parameters('name')), '2023-12-01').defaultHostName)]"
+            },
+            "managedIdentityId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-identity', parameters('name')))]"
             },
             "appInsightsId": {
               "type": "string",
               "value": "[resourceId('Microsoft.Insights/components', parameters('appInsightsName'))]"
-            },
-            "appInsightsName": {
-              "type": "string",
-              "value": "[parameters('appInsightsName')]"
-            },
-            "appInsightsInstrumentationKey": {
-              "type": "string",
-              "value": "[reference(resourceId('Microsoft.Insights/components', parameters('appInsightsName')), '2020-02-02').InstrumentationKey]"
             }
           }
         }
       },
       "dependsOn": [
-        "analyzerFunctionApp",
         "rg",
+        "storage",
         "webStorage"
       ]
     },
@@ -1057,6 +997,107 @@
             "languageServiceEndpoint": {
               "type": "string",
               "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', parameters('name')), '2023-05-01').endpoint]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "rg"
+      ]
+    },
+    "translator": {
+      "condition": "[parameters('deploySilverGold')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "translatorDeploy",
+      "resourceGroup": "[variables('resourceGroupName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "translatorAccountName": {
+            "value": "[variables('translatorAccountName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": {
+              "Environment": "[parameters('environment')]",
+              "Customer": "[parameters('customerName')]",
+              "Project": "MusTrusT"
+            }
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "languageVersion": "2.0",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.39.26.7824",
+              "templateHash": "8475750637895825633"
+            }
+          },
+          "parameters": {
+            "translatorAccountName": {
+              "type": "string"
+            },
+            "location": {
+              "type": "string"
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {}
+            }
+          },
+          "resources": {
+            "translatorAccount": {
+              "type": "Microsoft.CognitiveServices/accounts",
+              "apiVersion": "2023-05-01",
+              "name": "[parameters('translatorAccountName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "kind": "TextTranslation",
+              "sku": {
+                "name": "S1"
+              },
+              "properties": {
+                "customSubDomainName": "[parameters('translatorAccountName')]",
+                "publicNetworkAccess": "Enabled",
+                "networkAcls": {
+                  "defaultAction": "Allow"
+                }
+              }
+            }
+          },
+          "outputs": {
+            "accountId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('translatorAccountName'))]"
+            },
+            "accountName": {
+              "type": "string",
+              "value": "[parameters('translatorAccountName')]"
+            },
+            "endpoint": {
+              "type": "string",
+              "value": "[reference('translatorAccount').endpoint]"
+            },
+            "location": {
+              "type": "string",
+              "value": "[parameters('location')]"
+            },
+            "primaryKey": {
+              "type": "securestring",
+              "value": "[listKeys('translatorAccount', '2023-05-01').key1]"
+            },
+            "secondaryKey": {
+              "type": "securestring",
+              "value": "[listKeys('translatorAccount', '2023-05-01').key2]"
             }
           }
         }
@@ -1497,7 +1538,8 @@
         "cosmosDb",
         "languageService",
         "rg",
-        "storage"
+        "storage",
+        "translator"
       ]
     }
   },
@@ -1525,22 +1567,6 @@
     "webStorageWebEndpoint": {
       "type": "string",
       "value": "[reference('webStorage').outputs.webEndpoint.value]"
-    },
-    "functionAppName": {
-      "type": "string",
-      "value": "[reference('functionApp').outputs.name.value]"
-    },
-    "functionAppUrl": {
-      "type": "string",
-      "value": "[reference('functionApp').outputs.url.value]"
-    },
-    "cosmosAccountName": {
-      "type": "string",
-      "value": "[if(parameters('deploySilverGold'), variables('cosmosAccountName'), 'not-deployed')]"
-    },
-    "analyzerFunctionAppName": {
-      "type": "string",
-      "value": "[if(parameters('deploySilverGold'), variables('analyzerFunctionAppName'), 'not-deployed')]"
     }
   }
 }
