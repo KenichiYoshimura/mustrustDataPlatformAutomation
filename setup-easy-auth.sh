@@ -187,15 +187,24 @@ echo "✅ App Service settings updated"
 
 # Update Easy Auth configuration
 echo "🔐 Updating Easy Auth configuration..."
+# Explicitly set Azure AD registration (clientId + issuer) and global validation
 az webapp auth update \
     --resource-group "$RESOURCE_GROUP" \
     --name "$APP_NAME" \
     --enabled true \
     --unauthenticated-client-action RedirectToLoginPage \
+    --redirect-provider AzureActiveDirectory \
+    --set "platform.enabled=true" \
+    --set "globalValidation.requireAuthentication=false" \
+    --set "globalValidation.redirectToProvider=AzureActiveDirectory" \
     --set "identityProviders.azureActiveDirectory.enabled=true" \
     --set "identityProviders.azureActiveDirectory.registration.clientId=$CLIENT_ID" \
-    --set "identityProviders.azureActiveDirectory.registration.clientSecretSettingName=AZURE_AD_CLIENT_SECRET" \
-    --set "identityProviders.azureActiveDirectory.validation.defaultAuthorizationPolicy.allowedPrincipals.applications[0]=$CLIENT_ID"
+    --set "identityProviders.azureActiveDirectory.registration.openIdIssuer=https://login.microsoftonline.com/$TENANT_ID/v2.0" \
+    --set "identityProviders.azureActiveDirectory.registration.clientSecretSettingName=AZURE_AD_CLIENT_SECRET"
+
+# Show applied auth settings for verification
+echo "🔎 Current authsettingsV2:"
+az webapp auth show --resource-group "$RESOURCE_GROUP" --name "$APP_NAME" -o json | jq '{globalValidation: .globalValidation, identityProviders: .identityProviders}' || true
 
 echo "✅ Easy Auth configured"
 

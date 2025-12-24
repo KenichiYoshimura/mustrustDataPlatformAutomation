@@ -12,6 +12,7 @@ param aadTenantId string
 param aadClientId string
 @secure()
 param aadClientSecret string
+param allowedAadGroups string = ''
 
 // Analyzer backend connection (for preprocessor to call analyzer)
 param analyzerFunctionAppName string = ''
@@ -125,20 +126,23 @@ resource appSettingsResource 'Microsoft.Web/sites/config@2023-12-01' = {
     AAD_TENANT_ID: aadTenantId
     AAD_CLIENT_ID: aadClientId
     AZURE_AD_CLIENT_SECRET: aadClientSecret
+    ALLOWED_AAD_GROUPS: allowedAadGroups
   }
 }
 
-// Easy Auth Configuration
+// Easy Auth Configuration (authsettingsV2)
+// Configured to match dev's working setup: requireAuthentication: true, AllowAnonymous
+// This ensures groups claim is properly forwarded through Easy Auth principal
 resource easyAuthConfig 'Microsoft.Web/sites/config@2023-12-01' = {
   parent: appService
   name: 'authsettingsV2'
   properties: {
     platform: {
       enabled: true
+      runtimeVersion: '~1'
     }
     globalValidation: {
-      requireAuthentication: false
-      redirectToProvider: 'AzureActiveDirectory'
+      requireAuthentication: true
       unauthenticatedClientAction: 'AllowAnonymous'
     }
     identityProviders: {
@@ -153,29 +157,79 @@ resource easyAuthConfig 'Microsoft.Web/sites/config@2023-12-01' = {
           loginParameters: [
             'scope=openid profile email'
           ]
+          disableWWWAuthenticate: false
         }
+        validation: {
+          jwtClaimChecks: {}
+          allowedAudiences: [
+            aadClientId
+          ]
+          defaultAuthorizationPolicy: {
+            allowedPrincipals: {}
+          }
+        }
+      }
+      facebook: {
+        enabled: true
+        login: {}
+        registration: {}
+      }
+      gitHub: {
+        enabled: true
+        login: {}
+        registration: {}
+      }
+      google: {
+        enabled: true
+        login: {}
+        registration: {}
+        validation: {}
+      }
+      twitter: {
+        enabled: true
+        registration: {}
+      }
+      legacyMicrosoftAccount: {
+        enabled: true
+        login: {}
+        registration: {}
+        validation: {}
+      }
+      apple: {
+        enabled: true
+        login: {}
+        registration: {}
       }
     }
     login: {
+      routes: {}
       tokenStore: {
         enabled: true
         tokenRefreshExtensionHours: 72
+        fileSystem: {}
+        azureBlobStorage: {}
       }
-      allowedExternalRedirectUrls: [
-        'http://localhost:3000'
-        'https://localhost:3000'
-      ]
+      preserveUrlFragmentsForLogins: false
+      allowedExternalRedirectUrls: []
       cookieExpiration: {
         convention: 'FixedTime'
-        timeToExpiration: '1.00:00:00'  // 24 hours in format D.HH:MM:SS
+        timeToExpiration: '08:00:00'
+      }
+      nonce: {
+        validateNonce: true
+        nonceExpirationInterval: '00:05:00'
       }
     }
     httpSettings: {
       requireHttps: true
+      routes: {
+        apiPrefix: '/.auth'
+      }
       forwardProxy: {
         convention: 'NoProxy'
       }
     }
+    clearInboundClaimsMapping: 'false'
   }
 }
 

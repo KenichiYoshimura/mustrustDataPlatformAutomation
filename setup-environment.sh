@@ -167,22 +167,26 @@ fi
 echo -e "${GREEN}✅ Infrastructure deployed successfully${NC}"
 echo ""
 
-# Create service principal for GitHub Actions
-echo -e "${BLUE}🔑 Creating service principal for GitHub Actions...${NC}"
+# Create or reuse universal service principal for GitHub Actions (subscription-level, works for ALL customers/environments)
+echo -e "${BLUE}🔑 Setting up service principal for GitHub Actions...${NC}"
 
-# Check if service principal already exists
-SP_EXISTS=$(az ad sp list --display-name "$SP_NAME" --query "[0].appId" -o tsv 2>/dev/null)
+# Use single universal SP so one credential works for all customers and environments
+UNIVERSAL_SP_NAME="github-mustrust-automation"
+echo -e "Service Principal: ${BLUE}${UNIVERSAL_SP_NAME}${NC} (subscription-scoped, works for ALL customers/environments)"
+
+# Check if universal SP already exists
+SP_EXISTS=$(az ad sp list --display-name "$UNIVERSAL_SP_NAME" --query "[0].appId" -o tsv 2>/dev/null)
 
 if [[ -n "$SP_EXISTS" ]]; then
-  echo -e "${YELLOW}⚠️  Service principal '$SP_NAME' already exists${NC}"
-  echo "Resetting credentials..."
+  echo -e "${YELLOW}✅ Service principal '$UNIVERSAL_SP_NAME' already exists (reusing)${NC}"
+  echo "Refreshing credentials..."
   SP_JSON=$(az ad sp credential reset --id "$SP_EXISTS" --sdk-auth 2>/dev/null)
 else
   echo "Creating new service principal..."
   SP_JSON=$(az ad sp create-for-rbac \
-    --name "$SP_NAME" \
+    --name "$UNIVERSAL_SP_NAME" \
     --role contributor \
-    --scopes "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP" \
+    --scopes "/subscriptions/$SUBSCRIPTION_ID" \
     --sdk-auth 2>/dev/null)
 fi
 
@@ -195,7 +199,7 @@ echo -e "${GREEN}✅ Service principal created${NC}"
 echo ""
 
 # Save credentials to a temporary file
-CREDS_FILE=".azure-credentials-${CUSTOMER_NAME}-${ENVIRONMENT}.json"
+CREDS_FILE=".azure-credentials.json"
 echo "$SP_JSON" > "$CREDS_FILE"
 
 echo -e "${BLUE}╔════════════════════════════════════════════════╗${NC}"

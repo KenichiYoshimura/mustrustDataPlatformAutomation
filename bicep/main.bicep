@@ -13,6 +13,7 @@ param aadTenantId string = '' // Azure AD tenant ID for Easy Auth
 param aadClientId string = '' // Azure AD app client ID for Easy Auth
 @secure()
 param aadClientSecret string = '' // Azure AD app client secret for Easy Auth
+param allowedAadGroups string = '' // Comma-separated Azure AD group object IDs for access control
 
 // Variables
 var storageAccountName = 'stmustrust${customerName}${environment}'
@@ -66,6 +67,7 @@ module appServicePreprocessor 'modules/app-service-preprocessor.bicep' = if (dep
     analyzerStorageAccountName: storageAccountName
     analyzerStorageAccountKey: storage.outputs.accountKey
     appInsightsName: '${appServicePreprocessorName}-insights'
+    allowedAadGroups: allowedAadGroups
   }
 }
 

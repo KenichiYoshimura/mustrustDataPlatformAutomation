@@ -55,9 +55,10 @@ if [ ! -f "bicep/main.bicepparam" ]; then
   exit 1
 fi
 
-CUSTOMER_NAME=$(grep "param customerName" bicep/main.bicepparam | sed "s/.*= '\(.*\)'/\1/")
-ENVIRONMENT=$(grep "param environment" bicep/main.bicepparam | sed "s/.*= '\(.*\)'/\1/")
-LOCATION=$(grep "param location" bicep/main.bicepparam | sed "s/.*= '\(.*\)'/\1/")
+# Extract single-quoted values safely (ignore trailing comments)
+CUSTOMER_NAME=$(grep -E "^param[[:space:]]+customerName[[:space:]]*=" bicep/main.bicepparam | sed -E "s/.*= '([^']*)'.*/\1/")
+ENVIRONMENT=$(grep -E "^param[[:space:]]+environment[[:space:]]*=" bicep/main.bicepparam | sed -E "s/.*= '([^']*)'.*/\1/")
+LOCATION=$(grep -E "^param[[:space:]]+location[[:space:]]*=" bicep/main.bicepparam | sed -E "s/.*= '([^']*)'.*/\1/")
 
 if [ -z "$CUSTOMER_NAME" ] || [ -z "$ENVIRONMENT" ]; then
   echo "❌ Could not read customerName/environment from bicep/main.bicepparam"
@@ -66,10 +67,15 @@ fi
 
 RESOURCE_GROUP="rg-mustrust-${CUSTOMER_NAME}-${ENVIRONMENT}"
 LOCATION=${LOCATION:-japaneast}
+LOCATION=$(echo "$LOCATION" | tr -d '[:space:]')
 
 # Create resource group first (idempotent)
 echo "📦 Creating resource group: $RESOURCE_GROUP ($LOCATION)"
-az group create --name "$RESOURCE_GROUP" --location "$LOCATION" > /dev/null 2>&1 || true
+if ! az group create --name "$RESOURCE_GROUP" --location "$LOCATION" --output none 2>/dev/null; then
+  echo "❌ Failed to create resource group. Location parsed as '$LOCATION'."
+  echo "   Ensure location in bicep/main.bicepparam is a valid Azure region (e.g., 'japaneast')."
+  exit 1
+fi
 
 # Deploy to resource group scope
 echo "📦 Deploying infrastructure..."
