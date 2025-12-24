@@ -27,20 +27,20 @@ echo ""
 
 # Check Azure CLI
 if ! command -v az &> /dev/null; then
-    echo "❌ Azure CLI not installed. Install from: https://aka.ms/azure-cli"
-    exit 1
+  echo "❌ Azure CLI not installed. Install from: https://aka.ms/azure-cli"
+  exit 1
 fi
 
 # Check login
 if ! az account show &> /dev/null; then
-    echo "❌ Not logged in. Run: az login"
-    exit 1
+  echo "❌ Not logged in. Run: az login"
+  exit 1
 fi
 
 # Set subscription if provided
 if [ -n "$SUBSCRIPTION_ID" ]; then
-    echo "📌 Setting subscription to: $SUBSCRIPTION_ID"
-    az account set --subscription "$SUBSCRIPTION_ID"
+  echo "📌 Setting subscription to: $SUBSCRIPTION_ID"
+  az account set --subscription "$SUBSCRIPTION_ID"
 fi
 
 echo "✅ Logged in as: $(az account show --query user.name -o tsv)"
@@ -49,16 +49,33 @@ echo ""
 echo "📝 Using parameters from: bicep/main.bicepparam"
 echo ""
 
-# Create resource group first
-RG_NAME="rg-mustrust-yys-dev"
-echo "📦 Creating resource group: $RG_NAME"
-az group create --name "$RG_NAME" --location japaneast > /dev/null 2>&1 || true
+# Derive deployment parameters from bicepparam written by setup-environment.sh
+if [ ! -f "bicep/main.bicepparam" ]; then
+  echo "❌ bicep/main.bicepparam not found. Run setup-environment.sh first."
+  exit 1
+fi
+
+CUSTOMER_NAME=$(grep "param customerName" bicep/main.bicepparam | sed "s/.*= '\(.*\)'/\1/")
+ENVIRONMENT=$(grep "param environment" bicep/main.bicepparam | sed "s/.*= '\(.*\)'/\1/")
+LOCATION=$(grep "param location" bicep/main.bicepparam | sed "s/.*= '\(.*\)'/\1/")
+
+if [ -z "$CUSTOMER_NAME" ] || [ -z "$ENVIRONMENT" ]; then
+  echo "❌ Could not read customerName/environment from bicep/main.bicepparam"
+  exit 1
+fi
+
+RESOURCE_GROUP="rg-mustrust-${CUSTOMER_NAME}-${ENVIRONMENT}"
+LOCATION=${LOCATION:-japaneast}
+
+# Create resource group first (idempotent)
+echo "📦 Creating resource group: $RESOURCE_GROUP ($LOCATION)"
+az group create --name "$RESOURCE_GROUP" --location "$LOCATION" > /dev/null 2>&1 || true
 
 # Deploy to resource group scope
 echo "📦 Deploying infrastructure..."
 az deployment group create \
     --name "mustrust-deploy-$(date +%Y%m%d-%H%M%S)" \
-    --resource-group "$RG_NAME" \
+  --resource-group "$RESOURCE_GROUP" \
     --template-file bicep/main.bicep \
     --parameters bicep/main.bicepparam
 

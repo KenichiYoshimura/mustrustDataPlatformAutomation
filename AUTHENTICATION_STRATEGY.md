@@ -1,7 +1,9 @@
 # MusTrusT Data Platform - Authentication & Authorization Strategy
 
 **Date:** December 18, 2025  
-**Status:** Validated & Approved (ChatGPT Review)  
+**Last Updated:** December 23, 2025  
+**Status:** Phase 1 Complete | Phase 2-4 Outstanding  
+**Current Phase:** End-to-End Testing with Anonymous APIs (Interim)  
 **Approach:** Easy Auth + Managed Identity (Simple & Secure)
 
 ---
@@ -54,7 +56,7 @@ Instead of building a complex Front Door + JWT architecture, we're implementing 
 
 ## The 4-Step Implementation Plan
 
-### **Step 1: Enable Easy Auth on Preprocessor (User Login)**
+### **Step 1: Enable Easy Auth on Preprocessor (User Login) ✅ COMPLETED**
 
 **What it does:**
 - Users accessing Preprocessor are redirected to Azure AD login
@@ -75,7 +77,57 @@ az webapp auth update \
 
 **Result:** ✅ User is logged in and can access Preprocessor
 
-**Important:** Easy Auth only protects Preprocessor. It does NOT protect calls from Preprocessor → Analyzer. Steps 2-3 fix that.
+**Status:** ✅ DONE - Users can log in with Azure AD credentials
+
+---
+
+### **Interim Approach: Anonymous Analyzer APIs (Current)**
+
+**While Steps 2-4 are in development:**
+- Analyzer APIs changed from `authLevel: 'function'` to `authLevel: 'anonymous'`
+- Security model: Network isolation + Easy Auth on Preprocessor entry point
+- Only authenticated Preprocessor users can trigger API calls to Analyzer
+- Preprocessor backend makes calls without additional authentication tokens
+
+**This approach allows:**
+- ✅ End-to-end file upload/processing testing to work
+- ✅ Validation of the full data pipeline
+- ✅ Time to implement proper Managed Identity security
+
+**⚠️ Important:** This is temporary. Proper inter-service authentication (Steps 2-4 below) should be implemented before production deployment.
+
+---
+
+### **Step 2: Assign Managed Identity to Preprocessor ⏳ OUTSTANDING**
+
+**What it does:**
+- Gives the Preprocessor web app a system-assigned identity (like a service account)
+- Azure automatically manages the identity lifecycle (no secrets to store)
+- This identity can get tokens to call other Azure services
+
+**Commands:**
+```bash
+# Assign Managed Identity to Preprocessor
+az webapp identity assign \
+  --resource-group rg-mustrust-yys-dev \
+  --name func-mustrust-preprocessor-yys-dev
+
+# Get the identity's principal ID ⏳ OUTSTANDING
+IDENTITY_ID=$(az webapp identity show \
+  --resource-group rg-mustrust-yys-dev \
+  --name func-mustrust-preprocessor-yys-dev \
+  --query principalId -o tsv)
+
+# Grant this identity permission to access Analyzer
+az role assignment create \
+  --assignee-object-id $IDENTITY_ID \
+  --role "Web Plan Contributor" \
+  --scope /subscriptions/6a6d110d-80ef-424a-b8bb-24439063ffb2/resourceGroups/rg-mustrust-yys-dev/providers/Microsoft.Web/sites/func-mustrust-analyzer-yys-dev
+```
+
+**Status:** ⏳ PENDING - Execute after Phase 1 validation
+
+**Result:** ✅ Preprocessor can request tokens to call Analyzer
 
 ---
 
@@ -157,11 +209,13 @@ app.post("/api/process", async (req, res) => {
 });
 ```
 
+**Status:** ⏳ PENDING - Implement after Step 2 is complete
+
 **Result:** ✅ Preprocessor can securely call Analyzer APIs
 
 ---
 
-### **Step 4: Configure Analyzer to Validate Tokens (Critical!)**
+### **Step 4: Configure Analyzer to Validate Tokens (Critical!) ⏳ OUTSTANDING**
 
 **What it does:**
 - Analyzer must validate the tokens that Preprocessor sends
@@ -214,7 +268,29 @@ function validateToken(req, res, next) {
 app.post("/api/analyze", validateToken, (req, res) => {
   // Process request
 });
-```
+``Status:** ⏳ PENDING - Implement after Step 3 is complete
+
+**Result:** ✅ Analyzer validates all incoming tokens and rejects unauthorized calls
+
+---
+
+## Current Security Posture
+
+### Phase 1 (Current): Easy Auth + Anonymous APIs
+| Component | Protection | Status |
+|-----------|-----------|--------|
+| User → Preprocessor | Easy Auth (Azure AD) | ✅ Active |
+| Preprocessor Frontend | Azure AD session required | ✅ Active |
+| Analyzer APIs | Anonymous (network isolated) | ✅ Active (interim) |
+| Inter-service tokens | None (interim) | ⏳ Planned |
+
+### Phase 2 (Next): Managed Identity + Token Validation
+| Component | Protection | Status |
+|-----------|-----------|--------|
+| User → Preprocessor | Easy Auth (Azure AD) | ✅ Active |
+| Preprocessor Backend | Managed Identity tokens | ⏳ To be implemented |
+| Analyzer APIs | Token validation | ⏳ To be implemented |
+| Inter-service auth | Full end-to-end | ⏳ To be implemented |
 
 **Result:** ✅ Analyzer validates all incoming tokens and rejects unauthorized calls
 
@@ -246,32 +322,39 @@ await fetch("analyzer-url", {
   headers: { "Authorization": userToken }  // ❌ DON'T
 });
 ```
-**Why:** User tokens should not be shared with backend services.
+**Why:** User tokens should not be sha ✅ COMPLETE
+- [x] Get Preprocessor web app name: `func-mustrust-preprocessor-yys-dev`
+- [x] Get Azure AD client ID: `01e874b5-27e7-4b9f-aa77-633c5b4459bb`
+- [x] Run Easy Auth enable command
+- [x] Test: Visit Preprocessor URL → should redirect to login
+- [x] Verify: After login, X-MS-CLIENT-PRINCIPAL headers present
+- [x] Changed Analyzer APIs from 'function' to 'anonymous' auth level (interim)
 
-**Correct approach:** Use Managed Identity instead.
+### Phase 2: Managed Identity Setup ⏳ NEXT
+- [ ] Assign Managed Identity to Preprocessor
+- [ ] Get Preprocessor identity principal ID
+- [ ] Grant role to access Analyzer
+- [ ] Test: Check Preprocessor can request tokens
 
-### ❌ Mistake 2: Relying Only on Easy Auth for Service-to-Service
-Easy Auth protects incoming traffic only. It does NOT:
-- Authenticate Preprocessor → Analyzer calls
-- Validate tokens on Analyzer
+### Phase 3: Backend Code Changes ⏳ NEXT
+- [ ] Install Azure SDK: `npm install @azure/identity`
+- [ ] Update Preprocessor backend to use DefaultAzureCredential
+- [ ] Add token-based API calls to Analyzer
+- [ ] Test: Call Analyzer API from Preprocessor
+- [ ] Verify: Logs show successful token exchange
 
-You MUST add explicit token validation on Analyzer.
+### Phase 4: Analyzer Token Validation ⏳ NEXT
+- [ ] Enable Easy Auth on Analyzer (Option A)
+- [ ] OR implement custom token validation (Option B)
+- [ ] Test: Call Analyzer with valid token → 200 OK
+- [ ] Test: Call Analyzer without token → 401 Unauthorized
+- [ ] Test: Call Analyzer with invalid token → 401 Unauthorized
+- [ ] Change Analyzer APIs back from 'anonymous' to 'function' (or custom validation)
 
-### ❌ Mistake 3: Using Function Keys or App Secrets
-```javascript
-// WRONG
-const secret = "my-app-secret-123";  // ❌ Don't hardcode
-```
-**Why:** Secrets are hard to rotate and risk exposure.
-
-**Correct approach:** Use Managed Identity (automatic rotation).
-
----
-
-## Implementation Checklist
-
-### Phase 1: Easy Auth on Preprocessor
-- [ ] Get Preprocessor web app name: `func-mustrust-preprocessor-yys-dev`
+### Interim Testing (Current Phase)
+- [x] Test end-to-end file upload with Easy Auth + anonymous APIs
+- [x] Verify Preprocessor can call Analyzer endpoints
+- [ ] Confirm data flows through complete pipeliner-yys-dev`
 - [ ] Get Azure AD client ID: `01e874b5-27e7-4b9f-aa77-633c5b4459bb`
 - [ ] Run Easy Auth enable command
 - [ ] Test: Visit Preprocessor URL → should redirect to login
@@ -303,8 +386,24 @@ const secret = "my-app-secret-123";  // ❌ Don't hardcode
 
 **Verdict:** Production-ready design
 - ✅ **Secure:** Azure AD + Managed Identity
-- ✅ **Simple:** Minimal complexity vs. Front Door
-- ✅ **Scalable:** Standard Azure patterns
+## Current Status Summary
+
+**Phase 1 (Easy Auth on Preprocessor):** ✅ COMPLETE
+- Users logging in with Azure AD ✅
+- Preprocessor frontend protected ✅
+- Analyzer APIs set to anonymous (interim) ✅
+
+**Next Action:** Test end-to-end file upload functionality to validate Phase 1 before moving to Phase 2
+
+**Phase 2-4 (Managed Identity + Token Validation):** ⏳ OUTSTANDING - NEXT TASKS AFTER VALIDATION
+- These will secure inter-service communication
+- To be implemented after current end-to-end testing validates Phase 1
+- Estimated timeline: After Phase 1 stabilization
+
+---
+
+**Document Status:** Phase 1 Complete | Next phases documented | Ready for Phase 2 planning  
+**Last Updated:** 2025-12-23zure patterns
 - ✅ **Maintainable:** Clear trust boundaries
 
 **Why Better Than Complex Alternatives:**

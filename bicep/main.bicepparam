@@ -14,7 +14,7 @@ param storageAccountSku = 'Standard_LRS' // Standard_LRS is cheapest
 
 // Silver & Gold Layer Deployment
 // Set to true to deploy Cosmos DB and Silver/Gold Function Apps
-param deploySilverGold = false
+param deploySilverGold = true
 
 // App Service Preprocessor Deployment (Windows S1 with Easy Auth)
 param deployAppServicePreprocessor = true

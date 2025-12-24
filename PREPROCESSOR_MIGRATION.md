@@ -1,10 +1,11 @@
 # MusTrusT® Preprocessor Migration: Complete Documentation
 
 **Date:** December 23, 2025  
-**Status:** Final Architecture - Single App Service (Node.js + Python Tool)  
+**Status:** ✅ Phase 1 & 2 COMPLETE - Infrastructure & Code Deployed, Running on Node.js 20-lts  
+**Deployment:** Active at https://app-mustrust-preprocessor-yys-dev.azurewebsites.net  
 **Target:** Single Linux App Service with:
-  - **Frontend + API Gateway:** Node.js on Linux App Service S1
-  - **PDF Processing:** Python invoked as local CLI tool (not a service)
+  - **Frontend + API Gateway:** Node.js 20-lts on Linux App Service S1 ✅ Running
+  - **PDF Processing:** Python 3.11 invoked as local CLI tool (not a service) ✅ Available
 
 ---
 
@@ -71,6 +72,14 @@ Analyzer API
 | **Cost** | ~$100/month | ~$75/month | No increase, same S1 |
 | **Complexity** | High | Minimal | One deployment unit |
 | **Operational Risk** | High | Low | Single service, proven stack |
+
+### Post-migration validation (Dec 24, 2025)
+
+- ✅ Unicode filenames preserved end-to-end (mojibake decoded on ingress; blob metadata URL-encoded; displayFileName remains Unicode).
+- ✅ Blob uploads succeed for non-ASCII names (Azure metadata now ASCII-safe; blob names stay ASCII internalFileName).
+- ✅ Queue messages include only PNG pages (original PDF excluded) → single Silver doc per file.
+- ✅ PNG downloads use ASCII-safe page names (`<base>_page1.png`) and original downloads use displayFileName.
+- ✅ Blank-page issue resolved by filtering pages sent to Silver (only real content pages queued).
 
 ---
 
@@ -145,9 +154,10 @@ Analyzer Backend
 ### Single Linux App Service (Node.js + Python Tool)
 
 #### Primary Service: Node.js Frontend + API Gateway
-**SKU:** Standard S1 (Linux)  
-**Runtime:** NODE|18-lts  
-**App Name:** `app-mustrust-preprocessor-yys-dev`
+**SKU:** Standard S1 (Linux) - ✅ Deployed  
+**Runtime:** NODE|20-lts (Updated from 18-lts on Dec 23, 2025)  
+**App Name:** `app-mustrust-preprocessor-yys-dev` - ✅ Running  
+**Status:** Healthy ✅ | Last Deployment: Dec 23, 2025 01:21:33 PM | Successful
 
 **Responsibilities:**
 - ✅ Serve static frontend (index.html, app.js, styles.css, images)
@@ -165,9 +175,9 @@ Analyzer Backend
 - ✅ Zero HTTP routing complexity
 
 #### Python: Local CLI Tool (NOT a Service)
-**Installed on:** Same Linux App Service  
-**Runtime:** PYTHON|3.11 (available on Linux)  
-**Invocation:** `child_process.spawn('python', ['pdf_to_png.py', ...])`
+**Installed on:** Same Linux App Service ✅ Available  
+**Runtime:** PYTHON|3.11 (available on Linux) ✅ Verified  
+**Invocation:** `child_process.spawn('python', ['pdf_to_png.py', ...])` ✅ Implemented in server.js
 
 **Responsibilities:**
 - ✅ Convert PDF → PNG pages (300 DPI)
@@ -579,7 +589,7 @@ Analyzer Backend (Bronze/Silver/Gold)
 
 ### Phase 1: Create App Service Infrastructure (1-2 hours)
 
-**Status:** ✅ **COMPLETE**
+**Status:** ✅ **COMPLETE** (Deployed Dec 23, 2025)
 
 **Deliverable:** Bicep templates for single App Service with Node.js
 
@@ -609,11 +619,16 @@ Analyzer Backend (Bronze/Silver/Gold)
 
 **Verification (after deployment):**
 ```
-✅ Node.js version: 18-LTS
+✅ Node.js version: 20-LTS (upgraded from 18-LTS)
 ✅ OS: Linux
-✅ Easy Auth: Configured
-✅ Resource group: rg-mustrust-yys-dev
-✅ App Service: app-mustrust-preprocessor-yys-dev
+✅ Easy Auth: Configured with placeholder Azure AD credentials
+✅ Resource group: rg-mustrust-yys-dev (created)
+✅ App Service: app-mustrust-preprocessor-yys-dev (running)
+✅ Health Status: Healthy
+✅ Runtime Status: Healthy
+✅ Application Insights: Configured (app-mustrust-preprocessor-yys-dev-insights)
+✅ Log Analytics: Configured
+✅ Managed Identity: Assigned
 ```
 
 **Key Settings:**
@@ -621,16 +636,16 @@ Analyzer Backend (Bronze/Silver/Gold)
 param location string = 'japaneast'
 param customerName string = 'yys'
 param environment string = 'dev'
-param appServicePlanSku string = 'S1'  // Standard plan
-param osType string = 'Linux'          // Linux OS
-param nodeVersion string = '18-lts'    // Node.js runtime
-param alwaysOn = true                  // No cold starts
-param linuxFxVersion = 'NODE|18-lts'   // Linux-specific format
+param appServicePlanSku string = 'S1'  // Standard plan ✅ Deployed
+param osType string = 'Linux'          // Linux OS ✅ Deployed
+param nodeVersion string = '20-lts'    // Node.js runtime ✅ Upgraded to 20-lts
+param alwaysOn = true                  // No cold starts ✅ Enabled
+param linuxFxVersion = 'NODE|20-lts'   // Linux-specific format ✅ Active
 ```
 
 ### Phase 2: Implement Node.js Frontend + API Gateway (4-5 hours)
 
-**Status:** ✅ **COMPLETE**
+**Status:** ✅ **COMPLETE** (Deployed Dec 23, 2025 via GitHub Actions)
 
 **Deliverable:** Express.js application in `mustrustDataPlatformProcessor/server.js`
 
@@ -667,17 +682,20 @@ param linuxFxVersion = 'NODE|18-lts'   // Linux-specific format
 - [x] Global error handling & comprehensive logging
 - [x] CORS configured for cross-origin requests
 
-**Files created:**
-- [x] server.js (18 KB, 400+ lines, fully documented)
-- [x] package.json (Node.js dependencies specified)
-- [x] No web.config needed (Linux uses built-in Node.js runtime manager)
-  - **Note:** On Linux App Service, Node.js runs directly without IIS. Python tools are invoked directly via child_process.
+**Files created & deployed:**
+- [x] server.js (618 lines, fully documented) - ✅ Deployed
+- [x] package.json (Node.js dependencies specified) - ✅ Deployed
+- [x] package-lock.json - ✅ Generated
+- [x] startup.sh (Node.js server launcher) - ✅ Deployed
+- [x] No web.config needed (Linux uses built-in Node.js runtime manager) - ✅ Verified
 
 **Code validation:**
 - [x] Node.js syntax: Valid ✓
-- [x] All dependencies: Specified in package.json ✓
+- [x] All dependencies: Specified in package.json ✓ (200+ packages installed via npm ci)
 - [x] Comprehensive logging: Implemented ✓
 - [x] Error handling: Global middleware ✓
+- [x] GitHub Actions deployment: Successful ✓
+- [x] Express.js middleware: All configured ✓
 
 **package.json:**
 ```json
@@ -755,7 +773,7 @@ if (file.mimetype === 'application/pdf') {
 
 ### Phase 2b: Create Python PDF Conversion Script (1 hour)
 
-**Status:** ✅ **COMPLETE**
+**Status:** ✅ **COMPLETE** (Deployed Dec 23, 2025)
 
 **Deliverable:** Python CLI tool in `mustrustDataPlatformProcessor/pdf_to_png.py`
 
@@ -775,8 +793,9 @@ if (file.mimetype === 'application/pdf') {
 - [x] Proper logging to stderr for debugging
 - [x] No HTTP overhead (pure subprocess execution)
 
-**File created:**
-- [x] pdf_to_png.py (5.2 KB, 140+ lines, fully documented)
+**File created & deployed:**
+- [x] pdf_to_png.py (fully documented) - ✅ Deployed
+- [x] Python subprocess integration in server.js - ✅ Implemented
 - [x] Executable permissions: +x ✓
 
 **Code validation:**
@@ -841,15 +860,15 @@ if __name__ == '__main__':
 
 ### Phase 3: Configure Easy Auth (30 minutes)
 
-**Status:** ⏳ **PENDING** (Configured in Infrastructure, Ready)
+**Status:** ⏳ **IN PROGRESS** (Infrastructure configured, placeholder credentials active, needs real Azure AD app registration)
 
 **Deliverable:** Easy Auth configuration
 
 **Key Settings (from Phase 1):**
-- [x] Azure AD provider configured in Bicep
-- [x] Token store enabled
-- [x] X-MS-CLIENT-PRINCIPAL headers will be injected by App Service
-- [x] /.auth/me endpoint accessible after deployment
+- [x] Azure AD provider configured in Bicep ✅ Active
+- [x] Token store enabled ✅ Active
+- [x] X-MS-CLIENT-PRINCIPAL headers will be injected by App Service ✅ Ready
+- [x] /.auth/me endpoint accessible ✅ Available (currently requires placeholder credentials)
 
 **Next steps when deploying to Azure:**
 1. Verify Easy Auth headers are present: `X-MS-CLIENT-PRINCIPAL`
@@ -861,7 +880,7 @@ if __name__ == '__main__':
 
 ### Phase 4: Frontend Testing (1-2 hours)
 
-**Status:** ⏳ **PENDING** (Ready to test after deployment)
+**Status:** ⏳ **READY** (Code deployed, infrastructure live, waiting for app verification)
 
 **Deliverable:** Test results confirming all endpoints work
 
@@ -893,37 +912,34 @@ npm start
 
 ### Phase 5: Deployment & Verification (1-2 hours)
 
-**Status:** ⏳ **PENDING** (Ready to deploy)
+**Status:** ✅ **DEPLOYED** (Code and infrastructure active Dec 23, 2025)
 
 **Deliverable:** Production deployment to Azure App Service
 
-**Deployment Method: ZIP Deploy (Recommended for Linux)**
+**Deployment Method: GitHub Actions (Automated)**
 
-```bash
-# 1. Install Node.js dependencies
-cd /Users/kenichi/Desktop/GitHubMusTrusTDataProjects/mustrustDataPlatformProcessor
-npm install
+✅ **Deployed via GitHub Actions Workflow: `deploy-to-app-service.yml`**
 
-# 2. Install Python dependencies in virtual environment
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-deactivate
+**Workflow executed:**
+1. ✅ Checkout code from main branch
+2. ✅ Setup Python 3.11 + pip dependencies
+3. ✅ Setup Node.js 20 with npm caching
+4. ✅ Run `npm ci --production` (install 200+ dependencies)
+5. ✅ Create deployment package (ZIP with node_modules/)
+6. ✅ Azure login with service principal (AZURE_CREDENTIALS secret)
+7. ✅ Deploy to App Service via azure/webapps-deploy@v2
+8. ✅ Test deployment with curl
 
-# 3. Create deployment package (exclude venv, node_modules)
-zip -r app.zip . \
-  -x "node_modules/*" \
-  -x "venv/*" \
-  -x ".git/*" \
-  -x "__pycache__/*" \
-  -x "*.pyc"
+**Workflow status:**
+- ✅ Triggers on push to main branch
+- ✅ Uses service principal: github-mustrust-yys-dev
+- ✅ Credentials stored in GitHub secret: AZURE_CREDENTIALS
+- ✅ Single workflow active (removed old duplicate workflows: azure-app-service.yml, deploy-function.yml)
 
-# 4. Deploy to Azure App Service
-az webapp deployment source config-zip \
-  --resource-group rg-mustrust-yys-dev \
-  --name app-mustrust-preprocessor-yys-dev \
-  --src-path app.zip
-```
+**Execution history:**
+- ✅ Dec 23, 2025 - Initial deployment (Node.js 18)
+- ✅ Dec 23, 2025 - Updated to Node.js 20-lts
+- ✅ Successful deployment every push to main
 
 **Pre-deployment checklist:**
 - [x] Node.js 18-lts runtime configured (in Phase 1)
@@ -1262,5 +1278,56 @@ A: Yes. Keep current Functions deployment until migration verified. Switch DNS w
 
 ---
 
+**Last Updated:** December 23, 2025, 01:25 PM  
+**Status:** ✅ **ACTIVELY DEPLOYED & RUNNING**
+
+---
+
+## Recent Deployment Summary (December 23, 2025)
+
+### What Was Completed Today
+
+1. **Bicep Infrastructure Updated**
+   - ✅ Changed Node.js runtime from 18-lts to 20-lts (deprecation fix)
+   - ✅ Redeployed Bicep templates to rg-mustrust-yys-dev
+   - ✅ All resources updated and verified
+
+2. **GitHub Actions Cleaned Up**
+   - ✅ Removed azure-app-service.yml (duplicate)
+   - ✅ Removed deploy-function.yml (old Function App workflow)
+   - ✅ Single deploy-to-app-service.yml now handles all deployments
+   - ✅ Reduces redundant workflow runs from 3 to 1
+
+3. **Node.js 20 Deployed**
+   - ✅ GitHub Actions updated to use Node.js 20
+   - ✅ npm ci successfully installed all 200+ dependencies
+   - ✅ Code deployed to app-mustrust-preprocessor-yys-dev
+   - ✅ App Service reports "Healthy" status
+
+4. **Current Status**
+   - ✅ Infrastructure: Deployed and healthy
+   - ✅ Code: Deployed via GitHub Actions
+   - ✅ Runtime: Node.js 20-lts active
+   - ✅ Application Insights: Monitoring active
+   - ✅ Health Check: Passing
+
+### Next Steps
+
+1. **Phase 3: Easy Auth**
+   - Configure real Azure AD app registration (currently using placeholder)
+   - Test authentication flow
+
+2. **Phase 4: Testing**
+   - Test endpoint: https://app-mustrust-preprocessor-yys-dev.azurewebsites.net/
+   - Upload test file via POST /api/upload
+   - Verify analyzer receives files and processes them
+
+3. **Phase 5: Production Validation**
+   - Monitor Application Insights logs
+   - Verify PDF conversion performance
+   - Confirm all proxy endpoints working
+
+---
+
 **Last Updated:** December 23, 2025  
-**Status:** ✅ **READY FOR DEPLOYMENT**
+**Status:** ✅ **READY FOR EASY AUTH CONFIGURATION**
