@@ -119,7 +119,52 @@ Before running setup-environment.sh, configure `bicep/main.bicepparam`:
 - Sets ALLOWED_AAD_GROUPS app setting with group Object ID
 - Outputs configuration summary with group details
 
-**⚠️ Known Issue:** The script may not fully configure AuthV2. Manual verification required.
+**⚠️ CRITICAL - Manual Portal Configuration Required:**
+Due to an Azure CLI bug, the script cannot fully configure Easy Auth. You **MUST** complete the following steps in Azure Portal immediately after running the script.
+
+**Step 3.2.1: Fix Easy Auth Identity Provider (REQUIRED)**
+
+After the script completes, the identity provider will be incomplete. Fix it in Azure Portal:
+
+1. **Navigate to App Service:**
+   - Azure Portal → Search for: `app-mustrust-preprocessor-{customer}-{env}`
+   - Click: **Authentication** (left menu)
+
+2. **Check Identity Provider Status:**
+   - If you see "No identity provider" → Click **"Add identity provider"**
+   - If Microsoft provider exists → Click **"Edit"** next to it
+
+3. **Configure Identity Provider:**
+   - **Identity provider**: Microsoft
+   - **App registration type**: Pick an existing app registration in this directory
+   - **Name or app ID**: Select `mustrust-preprocessor-{customer}-{env}` (created by script)
+   - **Client secret expiration**: 730 days (24 months)
+   - **Issuer URL**: Change from `https://sts.windows.net/...` to `https://login.microsoftonline.com/{TENANT_ID}/v2.0`
+   - **Allowed token audiences**: Add the Client ID (shown in script output)
+   - **Client application requirement**: Allow requests only from this application itself
+   - **Identity requirement**: Allow requests from any identity
+   - **Tenant requirement**: Allow requests only from the issuer tenant
+   - **Restrict access**: Require authentication
+   - **Unauthenticated requests**: HTTP 302 Found redirect
+   - **Redirect to**: Microsoft
+   - **Token store**: Checked ✓
+   - Click **"Add"** or **"Save"**
+
+4. **Verify Group Claims (Usually Already Configured):**
+   - Azure Portal → **App registrations** → Find `mustrust-preprocessor-{customer}-{env}`
+   - Click: **Token configuration** (left menu)
+   - If "groups" claim exists → ✓ Skip this step
+   - If not → Click **"+ Add groups claim"** → Select **"Security groups"** → **"Add"**
+
+5. **Restart the App Service:**
+   ```bash
+   az webapp restart \
+     --resource-group "rg-mustrust-{customer}-{env}" \
+     --name "app-mustrust-preprocessor-{customer}-{env}"
+   ```
+
+**Why This Is Required:**
+The `az webapp auth update --set` command has a bug where `clientId`, `openIdIssuer`, and `allowedAudiences` don't persist properly in AuthV2. This must be fixed manually in the Portal.
 
 ### Step 3.3: Add Users to Security Group
 After running setup-easy-auth.sh, add users who should have access:
@@ -138,46 +183,25 @@ After running setup-easy-auth.sh, add users who should have access:
 
 Repeat for each user who needs access.
 
-### Step 3.4: Verify Easy Auth Configuration
+### Step 3.4: Test Easy Auth
 
-**Manual Verification Steps:**
-
-1. **Configure Group Claims in App Registration:**
-   - Azure Portal → App registrations → `mustrust-preprocessor-yys-prod`
-   - Token configuration → Add groups claim
-   - Select "Security groups" → Save
-
-2. **Verify Easy Auth Configuration in Portal:**
-   - App Service → Authentication
-   - Check "Identity provider" shows Microsoft
-   - Click "Edit" next to Microsoft provider
-   - Verify:
-     - Client ID: matches app registration
-     - Issuer URL: `https://login.microsoftonline.com/<TENANT_ID>/v2.0`
-     - Allowed token audiences: Client ID
-   - Save if any changes needed
-
-3. **Verify App Settings:**
-   ```bash
-   az webapp config appsettings list \
-     --resource-group "rg-mustrust-yys-prod" \
-     --name "app-mustrust-preprocessor-yys-prod" \
-     --query "[?name=='ALLOWED_AAD_GROUPS'].value" -o tsv
+1. **Navigate to app URL:**
    ```
-   **Note:** ALLOWED_AAD_GROUPS is automatically set by setup-easy-auth.sh.
+   https://app-mustrust-preprocessor-{customer}-{env}.azurewebsites.net
+   ```
 
-4. **Verify Authentication:**
-   - Navigate to app URL: `https://app-mustrust-preprocessor-yys-prod.azurewebsites.net`
-   - Should redirect to Azure AD login
-   - After successful login, visit `/.auth/me` endpoint
-   - Verify JSON response contains:
-     - `user_claims` with your email
-     - `groups` array containing the group Object ID
+2. **Expected Behavior:**
+   - Redirects to Azure AD login
+   - After successful login, shows the MusTrusT interface
+   - Visit `/.auth/me` endpoint to verify token contains `groups` claim
 
-**Troubleshooting:**
-- If you get HTTP 401 after login, verify users are members of the security group
-- Check that group claims are configured in app registration
-- Verify ALLOWED_AAD_GROUPS app setting matches the group Object ID
+3. **Troubleshooting:**
+   - **"Not found" error**: Easy Auth identity provider not configured → Complete Step 3.2.1
+   - **HTTP 401 after login**: User not in security group → Complete Step 3.3
+   - **HTTP 502 Bad Gateway**: App needs restart after Easy Auth changes
+     ```bash
+     az webapp restart --resource-group "rg-mustrust-{customer}-{env}" --name "app-mustrust-preprocessor-{customer}-{env}"
+     ```
 
 ### Step 3.5: Configure Dictionary for Fuzzy Search (v0.6 New Feature)
 After deployment, create initial dictionaries for comment search:
