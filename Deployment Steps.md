@@ -1,10 +1,11 @@
-# MusTrusT Data Platform - Complete Deployment Guide
+# MusTrusT Data Platform - Complete Deployment Guide (v0.6)
 
 ## Prerequisites
 - Azure CLI installed and authenticated (`az login`)
 - GitHub account with repository access
 - Azure subscription with appropriate permissions
 - Bicep CLI (included with Azure CLI)
+- Access to Azure AD (Entra ID) for creating security groups (PROD environments)
 
 ---
 
@@ -106,38 +107,136 @@ Before running setup-environment.sh, configure `bicep/main.bicepparam`:
 - Applies custom model IDs and API endpoints to Analyzer Function App settings
 - Validates all AI service connections
 
-### Step 3.2: Optional - Enable Easy Auth (Azure AD Authentication)
+### Step 3.2: Create Azure AD Security Groups (REQUIRED for PROD)
+**Before enabling Easy Auth, create security groups for access control:**
+
+1. **Create Security Group:**
+   ```bash
+   # Option 1: Via Azure Portal
+   # Entra ID → Groups → New group
+   # - Type: Security
+   # - Group name: mustrust-yys-prod-users
+   # - Description: Users with access to MusTrusT YYS Production
+   # - Members: Add users who need access
+   
+   # Option 2: Via Azure CLI
+   az ad group create \
+     --display-name "mustrust-yys-prod-users" \
+     --mail-nickname "mustrust-yys-prod-users" \
+     --description "Users with access to MusTrusT YYS Production"
+   ```
+
+2. **Get Group Object ID:**
+   ```bash
+   az ad group show \
+     --group "mustrust-yys-prod-users" \
+     --query id -o tsv
+   ```
+
+3. **Add Members to Group:**
+   ```bash
+   # Get user's Object ID first
+   az ad user show --id "user@domain.com" --query id -o tsv
+   
+   # Add user to group
+   az ad group member add \
+     --group "mustrust-yys-prod-users" \
+     --member-id "<USER_OBJECT_ID>"
+   ```
+
+### Step 3.3: Enable Easy Auth (Azure AD Authentication)
 ```bash
 ./setup-easy-auth.sh --customer yys --environment prod
 ```
 **What This Script Does:**
 - Creates Azure AD app registration for Preprocessor
 - Configures OAuth 2.0 redirect URIs
-- Enables Easy Auth on App Service
-- Configures group claims for access control
+- Enables Easy Auth (AuthV2) on App Service
 - Outputs configuration summary
 
+**⚠️ Known Issue:** The script may not fully configure AuthV2. Manual verification required.
+
 **Manual Steps After Easy Auth Setup:**
-1. **Configure Group Claims:**
-   - Azure Portal → App registrations → `mustrust-preprocessor-yys-prod` → Token configuration
-   - Add groups claim → choose "Security groups"
+
+1. **Configure Group Claims in App Registration:**
+   - Azure Portal → App registrations → `mustrust-preprocessor-yys-prod`
+   - Token configuration → Add groups claim
+   - Select "Security groups" → Save
+
+2. **Verify Easy Auth Configuration in Portal:**
+   - App Service → Authentication
+   - Check "Identity provider" shows Microsoft
+   - Click "Edit" next to Microsoft provider
+   - Verify:
+     - Client ID: matches app registration
+     - Issuer URL: `https://login.microsoftonline.com/<TENANT_ID>/v2.0`
+     - Allowed token audiences: Client ID
+   - Save if any changes needed
+
+3. **Update App Settings with Group Object ID:**
+   ```bash
+   # Get the group Object ID from Step 3.2
+   GROUP_ID=$(az ad group show --group "mustrust-yys-prod-users" --query id -o tsv)
    
-2. **Create Azure AD Group:**
-   - Entra ID → Groups → New group
-   - Type: Security, Assignment type: Assigned
-   - Name: `mustrust-yys-prod-users`
-   - Add users to the group
-   - Copy the group's Object ID
+   # Set ALLOWED_AAD_GROUPS
+   az webapp config appsettings set \
+     --resource-group "rg-mustrust-yys-prod" \
+     --name "app-mustrust-preprocessor-yys-prod" \
+     --settings ALLOWED_AAD_GROUPS="$GROUP_ID"
+   
+   # Restart app
+   az webapp restart \
+     --resource-group "rg-mustrust-yys-prod" \
+     --name "app-mustrust-preprocessor-yys-prod"
+   ```
 
-3. **Update App Settings:**
-   - App Service → Configuration → Application settings
-   - Set `ALLOWED_AAD_GROUPS` to the group Object ID (comma-separated if multiple)
-   - Save and restart the app
+4. **Verify Authentication:**
+   - Navigate to app URL: `https://app-mustrust-preprocessor-yys-prod.azurewebsites.net`
+   - Should redirect to Azure AD login
+   - After successful login, visit `/.auth/me` endpoint
+   - Verify JSON response contains:
+     - `user_claims` with your email
+     - `groups` array containing the group Object ID
+   - If 401 error: Check `ALLOWED_AAD_GROUPS` matches group Object ID
 
-4. **Verify:**
-   - Sign in to the app
-   - Visit `/.auth/me` endpoint
-   - Verify `groups` claim contains the group Object ID
+### Step 3.4: Configure Dictionary for Fuzzy Search (v0.6 New Feature)
+After deployment, create initial dictionaries for comment search:
+
+1. **Access Dictionary Management:**
+   - Navigate to: `https://app-mustrust-preprocessor-yys-prod.azurewebsites.net/dictionary-management.html`
+
+2. **Create Bank Survey Dictionary:**
+   - Survey Type: `bank`
+   - Add keywords with aliases:
+     ```
+     トイレ → toilet, 便所, 和式トイレ, 洋式トイレ
+     清掃 → 掃除, クリーニング, cleaning
+     対応 → サービス, 接客, service
+     待ち時間 → 待機, waiting, queue
+     ```
+
+3. **Create Hygiene Survey Dictionary:**
+   - Survey Type: `hygiene`
+   - Add keywords with aliases:
+     ```
+     清潔 → きれい, クリーン, clean
+     衛生 → 衛生的, sanitary, hygiene
+     確認 → チェック, check, inspection
+     ```
+
+4. **Create Workshop Survey Dictionary:**
+   - Survey Type: `workshop`
+   - Add keywords with aliases:
+     ```
+     理解 → わかりやすい, understand, comprehension
+     内容 → コンテンツ, content, material
+     講師 → 先生, instructor, teacher
+     ```
+
+5. **Test Fuzzy Search:**
+   - Go to analytics pages (bank/hygiene/workshop)
+   - Use search box with keywords or typos
+   - Verify Levenshtein distance matching works (e.g., "トイイレ" matches "トイレ")
 
 ---
 
@@ -149,16 +248,43 @@ Compare app settings between environments:
 ./verify-analyzer-config.sh --customer yys --env1 dev --env2 prod
 ```
 
-### Step 4.2: Test Deployment
+### Step 4.2: Verify v0.6 Features
+
+**1. Workshop Sentiment Analysis (3 Text Fields):**
+- Upload a workshop survey form with Q1.7, Q2, Q3 text responses
+- Check analytics: `https://app-mustrust-preprocessor-yys-prod.azurewebsites.net/workshop-analytics.html`
+- Verify each text field shows:
+  - Sentiment (positive/negative/neutral)
+  - Confidence score
+  - Language detection
+  - Translation (if non-Japanese)
+
+**2. Fuzzy Search with Dictionary:**
+- Navigate to bank/hygiene/workshop analytics
+- Try searching with typos (e.g., "トイイレ" should find "トイレ")
+- Try dictionary aliases (e.g., "toilet" should find "トイレ")
+- Verify search info shows: "X / Y 件が一致"
+
+**3. Storage Consolidation:**
+- Verify only 2 storage accounts exist:
+  ```bash
+  az storage account list \
+    --resource-group "rg-mustrust-yys-prod" \
+    --query "[].name" -o table
+  ```
+  - Expected: `stmustrustwebyys<hash>` + `stmustrustanalyzeryys<hash>`
+
+### Step 4.3: Test Deployment
 1. **Preprocessor:**
    - Navigate to App Service URL
-   - Login with Azure AD account (if Easy Auth enabled)
+   - Login with Azure AD account (verify user is in security group)
    - Test file upload functionality
+   - Check fuzzy search on analytics pages
 
 2. **Analyzer:**
    - Upload a test document to storage account `web-input-files` container
    - Monitor Function App logs
-   - Check Cosmos DB for processed data
+   - Check Cosmos DB Gold layer for enriched data with sentiment analysis
 
 ---
 
@@ -227,20 +353,44 @@ export VERBOSE=1
 
 ## Quick Reference: Common Deployments
 
-### Deploy New Customer (Full Stack)
+### Deploy New Customer (Full Stack) - v0.6
 ```bash
 # 1. Provision infrastructure with Analyzer
 ./setup-environment.sh --customer acme --environment prod --with-analyzer
 
-# 2. Deploy via GitHub Actions (trigger manually in Actions tab)
-# → mustrustDataPlatformProcessor workflow
-# → mustrustDataPlatformAnalyzer workflow
-
-# 3. Configure AI settings
+# 2. Configure AI settings
 ./configure-analyzer-ai.sh --customer acme --environment prod
 
-# 4. (Optional) Enable Easy Auth
+# 3. Create Azure AD security group (PROD only)
+az ad group create \
+  --display-name "mustrust-acme-prod-users" \
+  --mail-nickname "mustrust-acme-prod-users"
+
+# Add users to group
+az ad group member add \
+  --group "mustrust-acme-prod-users" \
+  --member-id "<USER_OBJECT_ID>"
+
+# 4. Enable Easy Auth
 ./setup-easy-auth.sh --customer acme --environment prod
+
+# 5. Configure ALLOWED_AAD_GROUPS
+GROUP_ID=$(az ad group show --group "mustrust-acme-prod-users" --query id -o tsv)
+az webapp config appsettings set \
+  --resource-group "rg-mustrust-acme-prod" \
+  --name "app-mustrust-preprocessor-acme-prod" \
+  --settings ALLOWED_AAD_GROUPS="$GROUP_ID"
+
+# 6. Deploy via GitHub Actions (trigger manually in Actions tab)
+# → mustrustDataPlatformProcessor workflow (tag: mustrust-data-v0.6)
+# → mustrustDataPlatformAnalyzer workflow (tag: mustrust-data-v0.6)
+
+# 7. Create dictionaries for fuzzy search
+# Access: https://app-mustrust-preprocessor-acme-prod.azurewebsites.net/dictionary-management.html
+# Create dictionaries for: bank, hygiene, workshop
+
+# 8. Verify deployment
+./verify-analyzer-config.sh --customer acme --env1 dev --env2 prod
 ```
 
 ### Deploy to Existing Environment
