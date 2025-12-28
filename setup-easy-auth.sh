@@ -63,6 +63,7 @@ echo "╚═══════════════════════�
 # Configuration
 APP_NAME="app-mustrust-preprocessor-${CUSTOMER}-${ENVIRONMENT}"
 APP_REGISTRATION_NAME="mustrust-preprocessor-${CUSTOMER}-${ENVIRONMENT}"
+SECURITY_GROUP_NAME="mustrust-${CUSTOMER}-${ENVIRONMENT}-users"
 RESOURCE_GROUP="rg-mustrust-${CUSTOMER}-${ENVIRONMENT}"
 TENANT_ID=$(az account show --query tenantId -o tsv)
 APP_DOMAIN="https://${APP_NAME}.azurewebsites.net"
@@ -72,6 +73,7 @@ echo "  Customer:           $CUSTOMER"
 echo "  Environment:        $ENVIRONMENT"
 echo "  App Service:        $APP_NAME"
 echo "  App Registration:   $APP_REGISTRATION_NAME"
+echo "  Security Group:     $SECURITY_GROUP_NAME"
 echo "  Resource Group:     $RESOURCE_GROUP"
 echo "  Tenant ID:          $TENANT_ID"
 echo "  Domain:             $APP_DOMAIN"
@@ -92,6 +94,30 @@ if ! az webapp show --resource-group "$RESOURCE_GROUP" --name "$APP_NAME" &>/dev
     exit 1
 fi
 echo "✅ App Service found"
+
+# Create or verify Azure AD security group
+echo ""
+echo "👥 Setting up Azure AD security group..."
+EXISTING_GROUP=$(az ad group list --display-name "$SECURITY_GROUP_NAME" --query "[0].id" -o tsv 2>/dev/null)
+
+if [[ -n "$EXISTING_GROUP" ]]; then
+    echo "✅ Security group already exists: $SECURITY_GROUP_NAME"
+    GROUP_ID="$EXISTING_GROUP"
+else
+    echo "📝 Creating security group..."
+    GROUP_ID=$(az ad group create \
+        --display-name "$SECURITY_GROUP_NAME" \
+        --mail-nickname "${CUSTOMER}-${ENVIRONMENT}-users" \
+        --description "Users allowed to access MusTrusT Data Platform for ${CUSTOMER} ${ENVIRONMENT}" \
+        --query id -o tsv)
+    echo "✅ Security group created: $SECURITY_GROUP_NAME"
+fi
+
+echo "   Group Object ID: $GROUP_ID"
+echo ""
+echo "⚠️  TODO: Add users to the security group:"
+echo "   az ad group member add --group \"$SECURITY_GROUP_NAME\" --member-id <USER_OBJECT_ID>"
+echo ""
 
 # Check if app registration already exists
 echo "🔍 Checking for existing app registration..."
@@ -181,9 +207,10 @@ az webapp config appsettings set \
     --settings \
     AZURE_AD_CLIENT_ID="$CLIENT_ID" \
     AZURE_AD_CLIENT_SECRET="$SECRET" \
-    AZURE_AD_TENANT_ID="$TENANT_ID"
+    AZURE_AD_TENANT_ID="$TENANT_ID" \
+    ALLOWED_AAD_GROUPS="$GROUP_ID"
 
-echo "✅ App Service settings updated"
+echo "✅ App Service settings updated (including ALLOWED_AAD_GROUPS)"
 
 # Update Easy Auth configuration
 echo "🔐 Updating Easy Auth configuration..."
@@ -220,11 +247,24 @@ echo "╚═══════════════════════�
 echo ""
 echo "✅ Your app is now secured with Easy Auth!"
 echo ""
+echo "📊 Configuration Summary:"
+echo "   App Registration:   $APP_REGISTRATION_NAME"
+echo "   Client ID:          $CLIENT_ID"
+echo "   Security Group:     $SECURITY_GROUP_NAME"
+echo "   Group Object ID:    $GROUP_ID"
+echo ""
 echo "🧪 Test it:"
 echo "   1. Open: $APP_DOMAIN"
 echo "   2. You should be redirected to Azure AD login"
 echo "   3. After login, you can access the app"
 echo ""
-echo "📝 For production, update the redirect URIs in Azure AD:"
-echo "   https://portal.azure.com → Azure AD → App registrations → $APP_REGISTRATION_NAME"
+echo "⚠️  IMPORTANT - Add Users to Security Group:"
+echo "   # Get user's Object ID"
+echo "   az ad user show --id \"user@domain.com\" --query id -o tsv"
+echo ""
+echo "   # Add user to group"
+echo "   az ad group member add --group \"$SECURITY_GROUP_NAME\" --member-id <USER_OBJECT_ID>"
+echo ""
+echo "📝 For production, verify Easy Auth in Azure Portal:"
+echo "   https://portal.azure.com → App Service → $APP_NAME → Authentication"
 echo ""

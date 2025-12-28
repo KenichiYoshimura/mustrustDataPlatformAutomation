@@ -107,56 +107,40 @@ Before running setup-environment.sh, configure `bicep/main.bicepparam`:
 - Applies custom model IDs and API endpoints to Analyzer Function App settings
 - Validates all AI service connections
 
-### Step 3.2: Create Azure AD Security Groups (REQUIRED for PROD)
-**Before enabling Easy Auth, create security groups for access control:**
-
-1. **Create Security Group:**
-   ```bash
-   # Option 1: Via Azure Portal
-   # Entra ID → Groups → New group
-   # - Type: Security
-   # - Group name: mustrust-yys-prod-users
-   # - Description: Users with access to MusTrusT YYS Production
-   # - Members: Add users who need access
-   
-   # Option 2: Via Azure CLI
-   az ad group create \
-     --display-name "mustrust-yys-prod-users" \
-     --mail-nickname "mustrust-yys-prod-users" \
-     --description "Users with access to MusTrusT YYS Production"
-   ```
-
-2. **Get Group Object ID:**
-   ```bash
-   az ad group show \
-     --group "mustrust-yys-prod-users" \
-     --query id -o tsv
-   ```
-
-3. **Add Members to Group:**
-   ```bash
-   # Get user's Object ID first
-   az ad user show --id "user@domain.com" --query id -o tsv
-   
-   # Add user to group
-   az ad group member add \
-     --group "mustrust-yys-prod-users" \
-     --member-id "<USER_OBJECT_ID>"
-   ```
-
-### Step 3.3: Enable Easy Auth (Azure AD Authentication)
+### Step 3.2: Enable Easy Auth (Azure AD Authentication)
 ```bash
 ./setup-easy-auth.sh --customer yys --environment prod
 ```
 **What This Script Does:**
 - Creates Azure AD app registration for Preprocessor
+- **Creates Azure AD security group** `mustrust-{customer}-{environment}-users`
 - Configures OAuth 2.0 redirect URIs
 - Enables Easy Auth (AuthV2) on App Service
-- Outputs configuration summary
+- Sets ALLOWED_AAD_GROUPS app setting with group Object ID
+- Outputs configuration summary with group details
 
 **⚠️ Known Issue:** The script may not fully configure AuthV2. Manual verification required.
 
-**Manual Steps After Easy Auth Setup:**
+### Step 3.3: Add Users to Security Group
+After running setup-easy-auth.sh, add users who should have access:
+
+1. **Get User's Object ID:**
+   ```bash
+   az ad user show --id "user@domain.com" --query id -o tsv
+   ```
+
+2. **Add User to Group:**
+   ```bash
+   az ad group member add \
+     --group "mustrust-yys-prod-users" \
+     --member-id "<USER_OBJECT_ID>"
+   ```
+
+Repeat for each user who needs access.
+
+### Step 3.4: Verify Easy Auth Configuration
+
+**Manual Verification Steps:**
 
 1. **Configure Group Claims in App Registration:**
    - Azure Portal → App registrations → `mustrust-preprocessor-yys-prod`
@@ -173,22 +157,14 @@ Before running setup-environment.sh, configure `bicep/main.bicepparam`:
      - Allowed token audiences: Client ID
    - Save if any changes needed
 
-3. **Update App Settings with Group Object ID:**
+3. **Verify App Settings:**
    ```bash
-   # Get the group Object ID from Step 3.2
-   GROUP_ID=$(az ad group show --group "mustrust-yys-prod-users" --query id -o tsv)
-   
-   # Set ALLOWED_AAD_GROUPS
-   az webapp config appsettings set \
+   az webapp config appsettings list \
      --resource-group "rg-mustrust-yys-prod" \
      --name "app-mustrust-preprocessor-yys-prod" \
-     --settings ALLOWED_AAD_GROUPS="$GROUP_ID"
-   
-   # Restart app
-   az webapp restart \
-     --resource-group "rg-mustrust-yys-prod" \
-     --name "app-mustrust-preprocessor-yys-prod"
+     --query "[?name=='ALLOWED_AAD_GROUPS'].value" -o tsv
    ```
+   **Note:** ALLOWED_AAD_GROUPS is automatically set by setup-easy-auth.sh.
 
 4. **Verify Authentication:**
    - Navigate to app URL: `https://app-mustrust-preprocessor-yys-prod.azurewebsites.net`
@@ -197,9 +173,13 @@ Before running setup-environment.sh, configure `bicep/main.bicepparam`:
    - Verify JSON response contains:
      - `user_claims` with your email
      - `groups` array containing the group Object ID
-   - If 401 error: Check `ALLOWED_AAD_GROUPS` matches group Object ID
 
-### Step 3.4: Configure Dictionary for Fuzzy Search (v0.6 New Feature)
+**Troubleshooting:**
+- If you get HTTP 401 after login, verify users are members of the security group
+- Check that group claims are configured in app registration
+- Verify ALLOWED_AAD_GROUPS app setting matches the group Object ID
+
+### Step 3.5: Configure Dictionary for Fuzzy Search (v0.6 New Feature)
 After deployment, create initial dictionaries for comment search:
 
 1. **Access Dictionary Management:**
@@ -361,35 +341,24 @@ export VERBOSE=1
 # 2. Configure AI settings
 ./configure-analyzer-ai.sh --customer acme --environment prod
 
-# 3. Create Azure AD security group (PROD only)
-az ad group create \
-  --display-name "mustrust-acme-prod-users" \
-  --mail-nickname "mustrust-acme-prod-users"
+# 3. Enable Easy Auth (creates app registration + security group)
+./setup-easy-auth.sh --customer acme --environment prod
 
-# Add users to group
+# 4. Add users to security group
+az ad user show --id "user@domain.com" --query id -o tsv
 az ad group member add \
   --group "mustrust-acme-prod-users" \
   --member-id "<USER_OBJECT_ID>"
 
-# 4. Enable Easy Auth
-./setup-easy-auth.sh --customer acme --environment prod
-
-# 5. Configure ALLOWED_AAD_GROUPS
-GROUP_ID=$(az ad group show --group "mustrust-acme-prod-users" --query id -o tsv)
-az webapp config appsettings set \
-  --resource-group "rg-mustrust-acme-prod" \
-  --name "app-mustrust-preprocessor-acme-prod" \
-  --settings ALLOWED_AAD_GROUPS="$GROUP_ID"
-
-# 6. Deploy via GitHub Actions (trigger manually in Actions tab)
+# 5. Deploy via GitHub Actions (trigger manually in Actions tab)
 # → mustrustDataPlatformProcessor workflow (tag: mustrust-data-v0.6)
 # → mustrustDataPlatformAnalyzer workflow (tag: mustrust-data-v0.6)
 
-# 7. Create dictionaries for fuzzy search
+# 6. Create dictionaries for fuzzy search
 # Access: https://app-mustrust-preprocessor-acme-prod.azurewebsites.net/dictionary-management.html
 # Create dictionaries for: bank, hygiene, workshop
 
-# 8. Verify deployment
+# 7. Verify deployment
 ./verify-analyzer-config.sh --customer acme --env1 dev --env2 prod
 ```
 
