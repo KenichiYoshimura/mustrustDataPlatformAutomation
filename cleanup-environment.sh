@@ -58,10 +58,14 @@ fi
 
 RESOURCE_GROUP="rg-mustrust-${CUSTOMER_NAME}-${ENVIRONMENT}"
 SP_NAME="github-mustrust-${CUSTOMER_NAME}-${ENVIRONMENT}"
+APP_REGISTRATION_NAME="mustrust-preprocessor-${CUSTOMER_NAME}-${ENVIRONMENT}"
+SECURITY_GROUP_NAME="mustrust-${CUSTOMER_NAME}-${ENVIRONMENT}-users"
 
 echo -e "${YELLOW}⚠️  WARNING: This will DELETE the following:${NC}"
 echo "  • Resource Group: $RESOURCE_GROUP (and all resources inside)"
 echo "  • Service Principal: $SP_NAME"
+echo "  • App Registration: $APP_REGISTRATION_NAME (if exists)"
+echo "  • Security Group: $SECURITY_GROUP_NAME (if exists)"
 echo ""
 read -p "Are you sure? Type 'yes' to confirm: " CONFIRM
 
@@ -112,8 +116,27 @@ else
   echo "Service principal not found: $SP_NAME"
 fi
 
+# Delete app registration
+APP_ID=$(az ad app list --display-name "$APP_REGISTRATION_NAME" --query "[0].id" -o tsv 2>/dev/null)
+if [[ -n "$APP_ID" ]]; then
+  echo "Deleting app registration: $APP_REGISTRATION_NAME"
+  az ad app delete --id "$APP_ID"
+else
+  echo "App registration not found: $APP_REGISTRATION_NAME"
+fi
+
+# Delete security group
+GROUP_ID=$(az ad group list --display-name "$SECURITY_GROUP_NAME" --query "[0].id" -o tsv 2>/dev/null)
+if [[ -n "$GROUP_ID" ]]; then
+  echo "Deleting security group: $SECURITY_GROUP_NAME"
+  az ad group delete --group "$GROUP_ID"
+else
+  echo "Security group not found: $SECURITY_GROUP_NAME"
+fi
+
 echo ""
 echo -e "${GREEN}✅ Cleanup complete${NC}"
 echo "Resource group has been deleted."
 echo "Cosmos DB and Cognitive Services have been purged."
+echo "Azure AD objects (service principal, app registration, security group) have been deleted."
 echo "You can now run setup-environment.sh to create a fresh environment."
