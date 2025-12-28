@@ -18,6 +18,7 @@ param allowedAadGroups string = '' // Comma-separated Azure AD group object IDs 
 // Variables
 var storageAccountName = 'stmustrust${customerName}${environment}'
 var webStorageAccountName = 'stmustrustweb${customerName}${environment}'
+var preprocessorStorageAccountName = 'stpreproc${customerName}${environment}' // Preprocessor staging storage
 var functionAppName = 'func-mustrust-preprocessor-${customerName}-${environment}'
 var appServicePreprocessorName = 'app-mustrust-preprocessor-${customerName}-${environment}' // New App Service (Linux S1)
 var cosmosAccountName = 'cosmos-mustrust-${customerName}-${environment}'
@@ -48,6 +49,18 @@ module webStorage 'modules/storage-web.bicep' = {
   }
 }
 
+// Preprocessor Storage Account (for background upload processing)
+// Created BEFORE App Service to avoid circular dependency
+module preprocessorStorage 'modules/preprocessor-storage.bicep' = if (deployAppServicePreprocessor) {
+  name: 'preprocessorStorageDeploy'
+  params: {
+    location: location
+    preprocessorStorageAccountName: preprocessorStorageAccountName
+    storageAccountSku: storageAccountSku
+    processingQueueName: 'preprocessor-file-processing-queue'
+  }
+}
+
 // NOTE: Function App for Preprocessor has been removed.
 // Using App Service S1 (Windows) instead per migration plan.
 // See PREPROCESSOR_MIGRATION.md for details on why Easy Auth requires App Service.
@@ -68,6 +81,7 @@ module appServicePreprocessor 'modules/app-service-preprocessor.bicep' = if (dep
     analyzerStorageAccountKey: storage.outputs.accountKey
     appInsightsName: '${appServicePreprocessorName}-insights'
     allowedAadGroups: allowedAadGroups
+    preprocessorStorageAccountName: preprocessorStorageAccountName
   }
 }
 
@@ -152,6 +166,7 @@ output storageAccountId string = storage.outputs.id
 output webStorageAccountName string = webStorage.outputs.name
 output webStorageAccountId string = webStorage.outputs.id
 output webStorageWebEndpoint string = webStorage.outputs.webEndpoint
+output preprocessorStorageAccountName string = deployAppServicePreprocessor ? preprocessorStorageAccountName : ''
 
 // Note: App Service and Function App outputs available in Azure Portal
 // - App Service Name: app-mustrust-preprocessor-{customer}-{environment}

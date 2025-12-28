@@ -21,6 +21,9 @@ param analyzerStorageAccountName string = ''
 @secure()
 param analyzerStorageAccountKey string = ''
 
+// Preprocessor storage (for background upload processing)
+param preprocessorStorageAccountName string = ''
+
 // Application Insights parameters
 param appInsightsName string = '${name}-insights'
 
@@ -77,6 +80,16 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' existing 
 // Get storage account key for connection
 var storageKey = storageAccount.listKeys().keys[0].value
 
+// Get preprocessor storage account reference (deployed before this module in main.bicep)
+// Only reference if name is provided (not empty string)
+resource preprocessorStorageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' existing = {
+  name: preprocessorStorageAccountName != '' ? preprocessorStorageAccountName : 'dummy-name-will-not-be-used'
+}
+
+// Preprocessor storage connection string - only build if storage account name is provided
+var preprocessorStorageKey = preprocessorStorageAccountName != '' ? preprocessorStorageAccount.listKeys().keys[0].value : ''
+var preprocessorStorageConnectionString = preprocessorStorageAccountName != '' ? 'DefaultEndpointsProtocol=https;AccountName=${preprocessorStorageAccountName};AccountKey=${preprocessorStorageKey};EndpointSuffix=core.windows.net' : ''
+
 // App Service
 resource appService 'Microsoft.Web/sites@2023-12-01' = {
   name: name
@@ -123,6 +136,7 @@ resource appSettingsResource 'Microsoft.Web/sites/config@2023-12-01' = {
     ANALYZER_STORAGE_ACCOUNT_NAME: analyzerStorageAccountName
     ANALYZER_STORAGE_ACCOUNT_KEY: analyzerStorageAccountKey
     ANALYZER_FUNCTION_URL: 'https://${analyzerFunctionAppName}.azurewebsites.net'
+    BRONZE_STORAGE_CONNECTION_STRING: preprocessorStorageConnectionString
     AAD_TENANT_ID: aadTenantId
     AAD_CLIENT_ID: aadClientId
     AZURE_AD_CLIENT_SECRET: aadClientSecret
@@ -149,7 +163,7 @@ resource easyAuthConfig 'Microsoft.Web/sites/config@2023-12-01' = {
       azureActiveDirectory: {
         enabled: true
         registration: {
-          openIdIssuer: 'https://login.microsoftonline.com/${aadTenantId}/v2.0'
+          openIdIssuer: 'https://${environment().authentication.loginEndpoint}/${aadTenantId}/v2.0'
           clientId: aadClientId
           clientSecretSettingName: 'AZURE_AD_CLIENT_SECRET'
         }
@@ -229,7 +243,6 @@ resource easyAuthConfig 'Microsoft.Web/sites/config@2023-12-01' = {
         convention: 'NoProxy'
       }
     }
-    clearInboundClaimsMapping: 'false'
   }
 }
 
