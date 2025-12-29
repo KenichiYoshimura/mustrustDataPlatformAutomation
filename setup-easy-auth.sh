@@ -157,6 +157,13 @@ az ad app update --id "$APP_ID" \
 
 echo "✅ Redirect URIs configured"
 
+# Configure group membership claims
+echo "👥 Configuring group membership claims..."
+az ad app update --id "$APP_ID" \
+    --set groupMembershipClaims=SecurityGroup
+
+echo "✅ Group membership claims configured"
+
 # Create service principal if it doesn't exist
 echo "🔑 Checking service principal..."
 SP_ID=$(az ad sp list --display-name "$APP_REGISTRATION_NAME" --query "[0].id" -o tsv 2>/dev/null || echo "")
